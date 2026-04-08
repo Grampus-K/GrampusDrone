@@ -1,0 +1,128 @@
+<launch>
+
+    <!-- ==================== 通用参数 ==================== -->
+    <arg name="drone_id" value="0"/>
+    <!-- 这里用的是grid_map.cpp局部滑动地图，所以不设置地图大小 -->
+    <!-- <arg name="map_size_x" value="200.0"/>
+    <arg name="map_size_y" value="200.0"/>
+    <arg name="map_size_z" value="3.0"/> -->
+
+    <!-- topic of your odometry such as VIO or LIO -->
+    <arg name="odom_topic" value="/imu_propagate" />
+
+    <!-- camera / depth / cloud -->
+    <arg name="camera_pose_topic" value="nouse1"/>
+    <arg name="depth_topic" value="/camera/depth/image_rect_raw"/>
+    <arg name="cloud_topic" value="/cloud_registered"/>
+
+    <!-- motion limits -->
+    <arg name="max_vel" value="1.0" />
+    <arg name="max_acc" value="6.0" />
+    <arg name="max_jer" value="20.0" />
+    <arg name="planning_horizon" value="7.5" />
+
+    <!-- ==================== EGO Planner 主节点 ==================== -->
+    <node pkg="ego_planner" name="drone_$(arg drone_id)_ego_planner_node" type="ego_planner_node" output="screen">
+
+        <!-- Remaps -->
+        <remap from="~odom_world" to="$(arg odom_topic)"/>
+        <remap from="~mandatory_stop" to="/mandatory_stop_to_planner"/>
+        <remap from="~planning/broadcast_traj_send" to="/broadcast_traj_from_planner"/>
+        <remap from="~planning/broadcast_traj_recv" to="/broadcast_traj_to_planner"/>
+
+        <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory"/>
+        <remap from="~planning/data_display" to="/drone_$(arg drone_id)_planning/data_display"/>
+        <remap from="~planning/heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>      
+
+        <remap from="/goal" to="/goal_with_id"/>
+        <remap from="~grid_map/odom" to="$(arg odom_topic)"/>
+        <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
+        <remap from="~grid_map/pose"   to = "$(arg camera_pose_topic)"/> 
+        <remap from="~grid_map/depth" to = "$(arg depth_topic)"/>
+
+        <!-- FSM 参数 -->
+        <param name="fsm/thresh_replan_time" value="1.0" type="double"/>
+        <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+        <param name="fsm/emergency_time" value="1.0" type="double"/>
+        <param name="fsm/realworld_experiment" value="true"/>
+        <param name="fsm/fail_safe" value="true"/>
+        <param name="fsm/ground_height_measurement" value="false"/>
+
+        <!-- 栅格地图参数 -->
+        <param name="grid_map/resolution" value="0.15"/>
+        <!-- <param name="grid_map/map_size_x" value="$(arg map_size_x)"/>
+        <param name="grid_map/map_size_y" value="$(arg map_size_y)"/>
+        <param name="grid_map/map_size_z" value="$(arg map_size_z)"/> -->
+        <param name="grid_map/local_update_range_x" value="5.5"/>
+        <param name="grid_map/local_update_range_y" value="5.5"/>
+        <param name="grid_map/local_update_range_z" value="4.0"/>
+        <param name="grid_map/obstacles_inflation" value="0.6"/>
+        <param name="grid_map/local_map_margin" value="10"/>
+        <param name="grid_map/enable_virtual_wall" value="true"/>
+        <param name="grid_map/virtual_ceil" value="3.0"/>
+        <param name="grid_map/virtual_ground" value="-0.1"/>
+        <param name="grid_map/ground_height" value="-0.01"/>
+
+        <!-- 相机参数 -->
+        <param name="grid_map/cx" value="321.04638671875"/>
+        <param name="grid_map/cy" value="243.44969177246094"/>
+        <param name="grid_map/fx" value="387.229248046875"/>
+        <param name="grid_map/fy" value="387.229248046875"/>
+
+        <!-- 深度滤波 -->
+        <param name="grid_map/use_depth_filter" value="true"/>
+        <param name="grid_map/depth_filter_tolerance" value="0.15"/>
+        <param name="grid_map/depth_filter_maxdist" value="5.0"/>
+        <param name="grid_map/depth_filter_mindist" value="0.2"/>
+        <param name="grid_map/depth_filter_margin" value="2"/>
+        <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
+        <param name="grid_map/skip_pixel" value="2"/>
+
+        <!-- 局部融合 -->
+        <param name="grid_map/p_hit" value="0.65"/>
+        <param name="grid_map/p_miss" value="0.35"/>
+        <param name="grid_map/p_min" value="0.12"/>
+        <param name="grid_map/p_max" value="0.90"/>
+        <param name="grid_map/p_occ" value="0.80"/>
+        <param name="grid_map/fading_time" value="1000.0"/>
+        <param name="grid_map/min_ray_length" value="0.1"/>
+        <param name="grid_map/max_ray_length" value="4.5"/>
+        <param name="grid_map/visualization_truncate_height" value="1.9"/>
+        <param name="grid_map/show_occ_time" value="false"/>
+        <param name="grid_map/pose_type" value="2"/>
+        <param name="grid_map/frame_id" value="world"/>
+
+        <!-- 规划器 -->
+        <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
+        <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
+        <param name="manager/polyTraj_piece_length" value="1.5" type="double"/>
+        <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
+        <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+        <param name="manager/use_multitopology_trajs" value="false" type="bool"/>
+        <param name="manager/drone_id" value="$(arg drone_id)"/>
+
+        <!-- 轨迹优化 -->
+        <param name="optimization/constraint_points_perPiece" value="5" type="int"/>
+        <param name="optimization/weight_obstacle" value="10000.0" type="double"/>
+        <param name="optimization/weight_obstacle_soft" value="5000.0" type="double"/>
+        <param name="optimization/weight_swarm" value="10000.0" type="double"/>
+        <param name="optimization/weight_feasibility" value="10000.0" type="double"/>
+        <param name="optimization/weight_sqrvariance" value="10000.0" type="double"/>
+        <param name="optimization/weight_time" value="10.0" type="double"/>
+        <param name="optimization/obstacle_clearance" value="0.1" type="double"/>
+        <param name="optimization/obstacle_clearance_soft" value="0.5" type="double"/>
+        <param name="optimization/swarm_clearance" value="0.15" type="double"/>
+        <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>
+        <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/>
+        <param name="optimization/max_jer" value="$(arg max_jer)" type="double"/>
+        <param name="optimization/record_opt" value="true"/>
+    </node>
+
+    <!-- ===================== 轨迹服务节点 ===================== -->
+    <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+        <remap from="position_cmd" to="/position_cmd"/>
+        <remap from="~planning/trajectory" to="drone_$(arg drone_id)_planning/trajectory"/>
+        <param name="traj_server/time_forward" value="1.0" type="double"/>
+    </node>
+
+</launch>
