@@ -1,30 +1,119 @@
+# GrampusDrone
 
-GrampusDrone
-介绍
+基于 [FAST-Drone-250](https://github.com/ZJU-FAST-Lab/FAST-Drone-250) 和
+[FAST-LIO2](https://github.com/hku-mars/FAST_LIO) 的单机无人机避障工程。
 
-作者：柯胤丞 
+作者：柯胤丞
 
-运行环境： 机载电脑：orin nano 8g 
-ubuntu版本：20.04 
-飞控：pixhawk 6cmini 1.13版本px4固件（必须用1.13）
+## 主要改动
 
-对比fast-drone250的改进： 
-1、将雷达里程计数据直接发给px4，然后px4将雷达里程计作为观测，融合imu获得/mavros/local_position/odom，px4ctrl里面用的就是这个mavros给的里程计 
-2、px4ctrl的状态机和控制器全部改了，现在遥控器可以作为最高优先级控制飞机，并且无需拨杆 
-3、规划器更换为ego-planner2，并且删减掉所有的集群相关和航点模式，只保留单机避障和rviz打点，并且规划器新增大量注释，launch文件也更加清晰
+- 将雷达里程计发送给 PX4，由 PX4 融合 IMU 后输出 `/mavros/local_position/odom`，`px4ctrl` 使用该里程计进行控制。
+- 修改 `px4ctrl` 状态机和控制器，使遥控器具有最高控制优先级，且无需拨动模式开关。
+- 将规划器更换为 `ego-planner2`，移除集群和航点模式，仅保留单机避障与 RViz 打点功能，并补充注释和启动文件说明。
 
-安装教程
+## 运行环境
 
-    安装mid360驱动和fastlio2雷达定位，可参考https://www.bilibili.com/opus/986664810984767490
-    安装mavros sudo apt-get install ros-noetic-mavros sudo apt-get install ros-noetic-mavros-extras cd /opt/ros/noetic/lib/mavros sudo ./install_geographiclib_datasets.sh
-    安装ceres和glog 解压3rd_party.zip压缩包 进入glog文件夹打开终端 sh autogen.sh && sh configure && make && sudo make install sudo apt-get install liblapack-dev libsuitesparse-dev libcxsparse3.1.2 libgflags-dev libgoogle-glog-dev libgtest-dev 进入ceres文件夹打开终端 mkdir build cd build cmake .. sudo make -j4 sudo make install
-    编译工作空间 catkin_make 注意：在编译的时候如果报错说找不到什么文件，那就需要首先编译fastlio，然后编译lidar_imu_init，最后再编译其他的
+- 机载电脑：NVIDIA Orin NX（Orin Nano 也可参考）
+- Ubuntu：20.04
+- ROS：ROS 1 Noetic
+- 飞控：Pixhawk 6C Mini，PX4 固件 1.13（必须使用 1.13）
+- 传感器：Livox Mid-360（其他雷达需要相应修改配置）
 
-    OpenCV版本说明：在Orin NX + Ubuntu 20.04 + ROS1环境下，JetPack系统通常提供OpenCV 4.5.4，而ROS Noetic自带的cv_bridge通常是按OpenCV 4.2编译的。编译时可能出现类似“libopencv_core.so.4.2 ... may conflict with libopencv_core.so.4.5”的链接器警告。只要catkin_make能够成功完成，且程序运行正常，目前可以暂时忽略该警告。不要直接删除或替换系统中的OpenCV库；如果以后运行时出现崩溃或图像处理异常，再考虑统一OpenCV版本或重新编译cv_bridge。
+## 安装依赖
 
-使用说明
+### 1. 安装 Mid-360、Livox 驱动和 FAST-LIO2
 
-    运行shfiles里面的脚本 sh ready_go.sh
-    等到显示校准完成之后，就可以打开roslaunch px4ctrl run.launch
-    最后再sh ego_launch.sh
+安装方法可参考：
 
+<https://www.bilibili.com/opus/986664810984767490>
+
+确认 Livox 驱动工作空间已经编译，并在编译本工程前加载其环境：
+
+```bash
+source ~/livox_ws/devel/setup.bash
+```
+
+如果你的 Livox 工作空间路径不同，请替换上面的路径。
+
+### 2. 安装 MAVROS
+
+```bash
+sudo apt update
+sudo apt install -y ros-noetic-mavros ros-noetic-mavros-extras
+
+cd /opt/ros/noetic/lib/mavros
+sudo ./install_geographiclib_datasets.sh
+```
+
+### 3. 安装 Ceres 及其依赖
+
+工程自带的 `3rd_party.zip` 中包含 Ceres 2.0.0-rc1 和 glog 源码。在 Ubuntu 20.04 上建议直接使用系统提供的 glog 开发包，再从压缩包源码编译 Ceres：
+
+```bash
+sudo apt update
+sudo apt install -y \
+  build-essential \
+  cmake \
+  libeigen3-dev \
+  libgflags-dev \
+  libgoogle-glog-dev \
+  libatlas-base-dev \
+  libsuitesparse-dev
+```
+
+已经安装的依赖会被 `apt` 自动跳过。不要再单独安装固定版本的 `libcxsparse3.1.2`：这个包名在 Ubuntu 20.04 或部分 JetPack 软件源中可能不存在，`libsuitesparse-dev` 会提供 Ceres 所需的 SuiteSparse/CXSparse 开发文件。
+
+安装 `libgoogle-glog-dev` 后通常不需要再编译压缩包中的 glog，以免 `/usr` 和 `/usr/local` 中出现两套 glog。解压 `3rd_party.zip` 后编译 Ceres：
+
+```bash
+cd ceres-solver-2.0.0rc1
+mkdir -p build
+cd build
+cmake ..
+make -j4
+sudo make install
+```
+
+如果压缩包解压后的 Ceres 目录不在当前路径，请先进入它所在的父目录，或将上面的目录名替换为实际路径。
+
+## 编译工程
+
+```bash
+cd ~/GrampusDrone
+source /opt/ros/noetic/setup.bash
+source ~/livox_ws/devel/setup.bash
+
+catkin_make -j$(nproc)
+```
+
+当前工程已经为 FAST-LIO 和 LiDAR-IMU-Init 的自定义消息生成目标声明了正确的 CMake 依赖，正常情况下可以直接全量编译，不需要先单独编译这两个包。
+
+## 运行
+
+```bash
+cd ~/GrampusDrone
+source /opt/ros/noetic/setup.bash
+source ~/livox_ws/devel/setup.bash
+source devel/setup.bash
+
+sh shfiles/ready_go.sh
+```
+
+等待校准完成后，再启动控制器和规划器：
+
+```bash
+roslaunch px4ctrl run_ctrl.launch
+sh shfiles/ego_launch.sh
+```
+
+具体启动脚本和参数请根据实际硬件、雷达安装方向及 PX4 配置进行确认。
+
+## OpenCV 版本提示（Orin NX）
+
+在 Orin NX + Ubuntu 20.04 + ROS Noetic 环境中，JetPack 通常提供 OpenCV 4.5.4，而 ROS Noetic 自带的 `cv_bridge` 通常按 OpenCV 4.2 编译。全量链接时可能看到：
+
+```text
+libopencv_core.so.4.2 ... may conflict with libopencv_core.so.4.5
+```
+
+如果 `catkin_make` 成功完成且程序运行正常，可以暂时忽略该警告。不要直接删除或替换系统中的 OpenCV 库；如果以后出现运行时崩溃或图像处理异常，再统一 OpenCV 版本或重新编译 `cv_bridge`。
