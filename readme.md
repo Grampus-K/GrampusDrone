@@ -20,6 +20,8 @@ ubuntu版本：20.04
     安装ceres和glog 解压3rd_party.zip压缩包 进入glog文件夹打开终端 sh autogen.sh && sh configure && make && sudo make install sudo apt-get install liblapack-dev libsuitesparse-dev libcxsparse3.1.2 libgflags-dev libgoogle-glog-dev libgtest-dev 进入ceres文件夹打开终端 mkdir build cd build cmake .. sudo make -j4 sudo make install
     编译工作空间 catkin_make 注意：在编译的时候如果报错说找不到什么文件，那就需要首先编译fastlio，然后编译lidar_imu_init，最后再编译其他的
 
+    OpenCV版本说明：在Orin NX + Ubuntu 20.04 + ROS1环境下，JetPack系统通常提供OpenCV 4.5.4，而ROS Noetic自带的cv_bridge通常是按OpenCV 4.2编译的。编译时可能出现类似“libopencv_core.so.4.2 ... may conflict with libopencv_core.so.4.5”的链接器警告。只要catkin_make能够成功完成，且程序运行正常，目前可以暂时忽略该警告。不要直接删除或替换系统中的OpenCV库；如果以后运行时出现崩溃或图像处理异常，再考虑统一OpenCV版本或重新编译cv_bridge。
+
 使用说明
 
     运行shfiles里面的脚本 sh ready_go.sh
