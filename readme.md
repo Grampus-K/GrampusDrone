@@ -45,6 +45,14 @@ cd /opt/ros/noetic/lib/mavros
 sudo ./install_geographiclib_datasets.sh
 ```
 
+将当前用户加入 `dialout` 用户组，以永久获得 `/dev/ttyACM0` 等串口设备的访问权限：
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+执行后需要注销并重新登录，或重启系统，权限才会生效。
+
 ### 3. 安装 Ceres 及其依赖
 
 工程自带的 `3rd_party.zip` 中包含 Ceres 2.0.0-rc1 和 glog 源码。在 Ubuntu 20.04 上建议直接使用系统提供的 glog 开发包，再从压缩包源码编译 Ceres：
