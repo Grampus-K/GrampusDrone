@@ -125,3 +125,42 @@ libopencv_core.so.4.2 ... may conflict with libopencv_core.so.4.5
 ```
 
 如果 `catkin_make` 成功完成且程序运行正常，可以暂时忽略该警告。不要直接删除或替换系统中的 OpenCV 库；如果以后出现运行时崩溃或图像处理异常，再统一 OpenCV 版本或重新编译 `cv_bridge`。
+
+## Ubuntu 端 Git 操作
+
+Windows 和 Ubuntu 使用同一个 GitHub 仓库。在 Ubuntu 开始修改前，先拉取 `master` 分支的最新内容：
+
+```bash
+cd ~/GrampusDrone
+git status
+git pull --rebase origin master
+```
+
+建议只在工作区没有未提交修改时执行 `git pull --rebase`。完成代码或配置修改后，按下面的流程提交并推送：
+
+```bash
+cd ~/GrampusDrone
+
+# 查看改动，确认没有包含运行日志或其他生成文件
+git status
+git diff
+
+# 按实际路径添加需要提交的文件，可以重复执行多次
+git add <文件路径>
+
+# 检查即将提交的内容
+git diff --cached
+git status
+
+# 创建本地提交
+git commit -m "简要说明本次修改"
+
+# 推送前同步远端的新提交，然后上传到 GitHub
+git pull --rebase origin master
+git push origin master
+
+# 确认本地与远端一致
+git status
+```
+
+除非已经确认所有改动都需要提交，否则不要直接使用 `git add -A`。尤其要注意 `FAST_LIO/Log`、`LiDAR_IMU_Init/Log` 和 `LiDAR_IMU_Init/result` 中的运行或标定输出；如果这些文件不是本次修改内容，就不要加入提交。
