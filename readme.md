@@ -164,3 +164,5 @@ git status
 ```
 
 除非已经确认所有改动都需要提交，否则不要直接使用 `git add -A`。尤其要注意 `FAST_LIO/Log`、`LiDAR_IMU_Init/Log` 和 `LiDAR_IMU_Init/result` 中的运行或标定输出；如果这些文件不是本次修改内容，就不要加入提交。
+
+Orin NX 上电自动启动方案及 Ubuntu 端逐步安装、测试和回退方法见 [`docs/onboard_autostart.md`](docs/onboard_autostart.md)。该方案只新增启动文件，默认不自动解锁或起飞。
