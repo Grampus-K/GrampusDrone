@@ -1,0 +1,27 @@
+<launch>
+    <!-- Additive unified startup. This file never arms or takes off. -->
+    <arg name="fcu_url" default="/dev/ttyACM0:57600" />
+    <arg name="start_controller" default="false" />
+    <arg name="start_planner" default="false" />
+
+    <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" />
+
+    <include file="$(find mavros)/launch/px4.launch">
+        <arg name="fcu_url" value="$(arg fcu_url)" />
+    </include>
+
+    <include file="$(find fast_lio)/launch/mapping_mid360.launch" />
+
+    <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="lio_to_mavros"
+          output="screen" respawn="true" respawn_delay="2" />
+
+    <node if="$(arg start_controller)"
+          pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl"
+          output="screen" respawn="true" respawn_delay="2">
+        <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_fpv.yaml" />
+        <remap from="~cmd" to="/position_cmd" />
+    </node>
+
+    <include if="$(arg start_planner)"
+             file="$(find ego_planner)/launch/ego_planner_run_in_exp.launch" />
+</launch>

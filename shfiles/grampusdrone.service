@@ -1,0 +1,20 @@
+[Unit]
+Description=GrampusDrone onboard ROS stack
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=orin
+WorkingDirectory=/home/orin/GrampusDrone
+Environment=FCU_DEVICE=/dev/ttyACM0
+Environment=FCU_BAUD=57600
+Environment=START_CONTROLLER=false
+Environment=START_PLANNER=false
+ExecStart=/home/orin/GrampusDrone/shfiles/start_onboard.sh
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
