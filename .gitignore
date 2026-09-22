@@ -18,6 +18,9 @@ __pycache__/
 *.pcd
 *.tar.gz
 
+# FAST-LIO runtime output (generated locally)
+/src/realflight_modules/FAST_LIO/Log/mat_pre.txt
+
 # ================= IDE =================
 .vscode/
 .idea/
