@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -Eeo pipefail
 
 WORKSPACE="/home/orin/GrampusDrone"
 FCU_DEVICE="${FCU_DEVICE:-/dev/ttyACM0}"

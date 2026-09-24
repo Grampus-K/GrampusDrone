@@ -115,6 +115,60 @@ systemctl status grampusdrone.service
 journalctl -u grampusdrone.service -b --no-pager
 ~~~
 
+## 常见启动失败
+
+### 1. `status=203/EXEC` 或 `Permission denied`
+
+典型日志：
+
+~~~text
+Failed at step EXEC spawning /home/orin/GrampusDrone/shfiles/start_onboard.sh: Permission denied
+grampusdrone.service: Main process exited, status=203/EXEC
+~~~
+
+这表示 systemd 已经找到启动脚本，但脚本没有执行权限。检查权限：
+
+~~~bash
+cd ~/GrampusDrone
+ls -l shfiles/start_onboard.sh shfiles/wait_for_stack.sh
+~~~
+
+权限中应包含 `x`，例如 `-rwxr-xr-x`。若没有，执行：
+
+~~~bash
+chmod +x shfiles/start_onboard.sh shfiles/wait_for_stack.sh
+sudo systemctl restart grampusdrone.service
+~~~
+
+仓库已经保存了这两个脚本的可执行位；但通过 ZIP、Windows 文件系统或其他不保留 Unix 权限的方式复制工程时，仍可能需要重新执行 `chmod +x`。
+
+### 2. `ROS_DISTRO：未绑定的变量`
+
+典型日志：
+
+~~~text
+/opt/ros/noetic/etc/catkin/profile.d/1.ros_distro.sh: ROS_DISTRO：未绑定的变量
+~~~
+
+旧版 `start_onboard.sh` 在加载 ROS 环境前执行了 `set -Eeuo pipefail`。其中 `-u` 会让 Bash 在 ROS 环境脚本读取尚未定义的变量时立即退出。当前脚本已改为：
+
+~~~bash
+set -Eeo pipefail
+~~~
+
+如果使用的是旧版本工程，可删除该行中的 `u`，然后重启服务：
+
+~~~bash
+sudo systemctl restart grampusdrone.service
+~~~
+
+排查时只查看本次开机的最近日志，避免把修复前的旧错误误认为当前错误：
+
+~~~bash
+systemctl status grampusdrone.service --no-pager -l
+sudo journalctl -u grampusdrone.service -b -n 100 --no-pager
+~~~
+
 ## 回退
 
 出现任何异常时，停用服务即可恢复原来的手动启动方式：
