@@ -39,7 +39,7 @@ cd ~/GrampusDrone
 source /opt/ros/noetic/setup.bash
 source ~/livox_ws/devel/setup.bash
 source devel/setup.bash
-sh shfiles/wait_for_stack.sh 120
+bash shfiles/wait_for_stack.sh 120
 ~~~
 
 检查通过后按 Ctrl+C 停止 launch。若失败，原来的命令仍可直接使用：
