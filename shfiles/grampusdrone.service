@@ -1,7 +1,7 @@
 [Unit]
 Description=GrampusDrone onboard ROS stack
-After=network-online.target
-Wants=network-online.target
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
 
 [Service]
 Type=simple
@@ -11,6 +11,10 @@ Environment=FCU_DEVICE=/dev/ttyACM0
 Environment=FCU_BAUD=57600
 Environment=START_CONTROLLER=false
 Environment=START_PLANNER=false
+Environment=MIN_VALID_EPOCH=1735689600
+Environment=CLOCK_STABLE_SECONDS=10
+Environment=CLOCK_STEP_TOLERANCE=0.5
+Environment=CLOCK_WAIT_TIMEOUT=0
 ExecStart=/home/orin/GrampusDrone/shfiles/start_onboard.sh
 Restart=on-failure
 RestartSec=5

@@ -9,11 +9,14 @@ project(lio_to_mavros)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
+  mavros_msgs
+  nav_msgs
   std_msgs
   roscpp
   rospy
   tf
   tf2
+  tf2_geometry_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -108,7 +111,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES my_nav
- CATKIN_DEPENDS geometry_msgs roscpp rospy tf tf2 std_msgs
+ CATKIN_DEPENDS geometry_msgs mavros_msgs nav_msgs roscpp rospy tf tf2 tf2_geometry_msgs std_msgs
 #  DEPENDS system_lib
 )
 
@@ -155,6 +158,7 @@ include_directories(
 
 
    add_executable(lio_to_mavros_node src/lio_to_mavros.cpp)
+   set_target_properties(lio_to_mavros_node PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
    target_link_libraries(lio_to_mavros_node
       ${catkin_LIBRARIES}
     )

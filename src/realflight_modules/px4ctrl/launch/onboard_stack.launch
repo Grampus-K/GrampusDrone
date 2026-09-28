@@ -10,10 +10,15 @@
         <arg name="fcu_url" value="$(arg fcu_url)" />
     </include>
 
-    <include file="$(find fast_lio)/launch/mapping_mid360.launch" />
+    <include file="$(find fast_lio)/launch/mapping_mid360.launch">
+        <arg name="fastlio_respawn" value="true" />
+    </include>
 
     <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="lio_to_mavros"
-          output="screen" respawn="true" respawn_delay="2" />
+          output="screen" respawn="true" respawn_delay="2">
+        <param name="auto_restart_before_first_publish" value="true" />
+        <param name="clock_step_tolerance" value="0.5" />
+    </node>
 
     <node if="$(arg start_controller)"
           pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl"

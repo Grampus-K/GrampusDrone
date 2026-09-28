@@ -7,6 +7,8 @@ FCU_BAUD="${FCU_BAUD:-57600}"
 START_CONTROLLER="${START_CONTROLLER:-false}"
 START_PLANNER="${START_PLANNER:-false}"
 
+python3 "${WORKSPACE}/shfiles/wait_for_stable_clock.py"
+
 source /opt/ros/noetic/setup.bash
 source /home/orin/livox_ws/devel/setup.bash
 source "${WORKSPACE}/devel/setup.bash"
@@ -22,10 +24,22 @@ roslaunch px4ctrl onboard_stack.launch \
     start_planner:="${START_PLANNER}" &
 LAUNCH_PID=$!
 
+python3 "${WORKSPACE}/shfiles/monitor_system_time.py" &
+TIME_MONITOR_PID=$!
+
 cleanup() {
     kill "${LAUNCH_PID}" 2>/dev/null || true
+    kill "${TIME_MONITOR_PID}" 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 42' TERM
 
-"${WORKSPACE}/shfiles/wait_for_stack.sh" 120
-wait "${LAUNCH_PID}"
+REQUIRE_SYSTEM_TIME_MONITOR=true "${WORKSPACE}/shfiles/wait_for_stack.sh" 120
+
+# Either roslaunch ended or the time monitor requested a full-stack restart.
+set +e
+wait -n "${LAUNCH_PID}" "${TIME_MONITOR_PID}"
+EXIT_STATUS=$?
+set -e
+exit "${EXIT_STATUS}"
