@@ -80,6 +80,7 @@ namespace ego_planner {
         double planning_horizen_;
         double emergency_time_;
         bool flag_realworld_experiment_;
+        bool odom_velocity_in_body_{false};
         bool enable_fail_safe_;
         bool enable_ground_height_measurement_;
         bool flag_escape_emergency_;

@@ -1,5 +1,7 @@
 # Orin NX 上电自动启动
 
+FAST-LIO 的 `/Odometry`、`/imu_propagate` 与规划器的速度坐标约定，见 [里程计坐标说明](odometry_frames.md)。
+
 自动启动只让系统进入待飞状态，不会自动解锁或起飞。定位门控现在会在数据明显异常时停止向 MAVROS 发布视觉位姿；原来的 ready_go.sh 和 PX4 参数未改动。
 
 ## 新增文件

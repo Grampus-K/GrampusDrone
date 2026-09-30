@@ -9,6 +9,8 @@
 
     <!-- topic of your odometry such as VIO or LIO -->
     <arg name="odom_topic" value="/imu_propagate" />
+    <!-- FAST-LIO pose is in world; twist is in body. EGO needs world velocity. -->
+    <arg name="odom_velocity_in_body" default="true" />
 
     <!-- camera / depth / cloud -->
     <arg name="camera_pose_topic" value="nouse1"/>
@@ -45,6 +47,7 @@
         <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
         <param name="fsm/emergency_time" value="1.0" type="double"/>
         <param name="fsm/realworld_experiment" value="true"/>
+        <param name="fsm/odom_velocity_in_body" value="$(arg odom_velocity_in_body)" type="bool"/>
         <param name="fsm/fail_safe" value="true"/>
         <param name="fsm/ground_height_measurement" value="false"/>
 

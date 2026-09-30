@@ -441,11 +441,12 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in )
     pub_last_acc = acc;
     pub_last_gyr = gyr;
 
-    // 组装并发布里程计（world→body）
+    // nav_msgs/Odometry 约定：pose 在 header.frame_id，twist 在
+    // child_frame_id；这里统一发布 world 位姿、body 速度。
     nav_msgs::Odometry odom;
     odom.header.stamp = ros::Time(timestamp);
     odom.header.frame_id = "world";
-    // odom.child_frame_id  = "body";
+    odom.child_frame_id = "body";
 
     // 位姿
     odom.pose.pose.position.x = pub_x.pos.x();
@@ -457,14 +458,8 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in )
     odom.pose.pose.orientation.z = pub_rot_quat.z();
     odom.pose.pose.orientation.w = pub_rot_quat.w();
 
-    // // 按世界系发布线速度
-    // odom.twist.twist.linear.x = pub_x.vel.x();
-    // odom.twist.twist.linear.y = pub_x.vel.y();
-    // odom.twist.twist.linear.z = pub_x.vel.z();
-
-
-    // === 关键改动：速度改为 body 系 ===
-    // v_body = R^T * v_world，其中 R 为 world→body 的旋转（与姿态一致）
+    // pub_x.vel is world-frame; Odometry.twist is expressed in child_frame_id.
+    // pub_rot_quat maps body vectors to world, so its conjugate maps back.
     Eigen::Vector3d v_world(pub_x.vel.x(), pub_x.vel.y(), pub_x.vel.z());
     Eigen::Vector3d v_body = pub_rot_quat.conjugate() * v_world;
 
@@ -720,14 +715,17 @@ void set_posestamp(T & out)
 void publish_odometry(const ros::Publisher & pubOdomAftMapped)
 {
     odomAftMapped.header.frame_id = "world";
-    // odomAftMapped.child_frame_id = "body";
+    odomAftMapped.child_frame_id = "body";
     odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);// ros::Time().fromSec(lidar_end_time);
     set_posestamp(odomAftMapped.pose);
 
     /***********************grampus added************************/
-    odomAftMapped.twist.twist.linear.x = state_point.vel(0);
-    odomAftMapped.twist.twist.linear.y = state_point.vel(1);
-    odomAftMapped.twist.twist.linear.z = state_point.vel(2);
+    // state_point.rot maps body to world. Odometry.twist uses child_frame_id,
+    // so both /Odometry and /imu_propagate publish R^T * v_world.
+    const V3D vel_body = state_point.rot.conjugate() * state_point.vel;
+    odomAftMapped.twist.twist.linear.x = vel_body(0);
+    odomAftMapped.twist.twist.linear.y = vel_body(1);
+    odomAftMapped.twist.twist.linear.z = vel_body(2);
     /***********************grampus added************************/
 
     pubOdomAftMapped.publish(odomAftMapped);

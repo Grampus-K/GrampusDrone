@@ -15,6 +15,9 @@ namespace ego_planner
     nh.param("fsm/planning_horizon", planning_horizen_, -1.0);
     nh.param("fsm/emergency_time", emergency_time_, 1.0);
     nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);
+    // Legacy simulator odometry contains world-frame velocity. Real FAST-LIO
+    // odometry follows the ROS child-frame twist convention (enabled in launch).
+    nh.param("fsm/odom_velocity_in_body", odom_velocity_in_body_, false);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
     nh.param("fsm/ground_height_measurement", enable_ground_height_measurement_, false);
 
@@ -456,13 +459,29 @@ start_collision_check:
 
   void EGOReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg)
   {
+    Eigen::Vector3d velocity(msg->twist.twist.linear.x,
+                             msg->twist.twist.linear.y,
+                             msg->twist.twist.linear.z);
+    if (odom_velocity_in_body_)
+    {
+      const auto &q = msg->pose.pose.orientation;
+      Eigen::Quaterniond body_to_world(q.w, q.x, q.y, q.z);
+      if (msg->child_frame_id.empty() || msg->header.frame_id.empty() ||
+          !body_to_world.coeffs().allFinite() ||
+          body_to_world.norm() < 1e-6 || !velocity.allFinite())
+      {
+        ROS_ERROR_THROTTLE(1.0, "Invalid body-frame odometry: missing frame or invalid quaternion/velocity");
+        return;
+      }
+      // EGO's trajectory and position live in header.frame_id. Convert twist
+      // from the moving child frame using the full attitude, not yaw alone.
+      velocity = body_to_world.normalized() * velocity;
+    }
     odom_pos_(0) = msg->pose.pose.position.x;
     odom_pos_(1) = msg->pose.pose.position.y;
     odom_pos_(2) = msg->pose.pose.position.z;
 
-    odom_vel_(0) = msg->twist.twist.linear.x;
-    odom_vel_(1) = msg->twist.twist.linear.y;
-    odom_vel_(2) = msg->twist.twist.linear.z;
+    odom_vel_ = velocity;
 
     have_odom_ = true;
   }
