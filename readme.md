@@ -168,3 +168,5 @@ git status
 Orin NX 上电自动启动方案及 Ubuntu 端逐步安装、测试和回退方法见 [`docs/onboard_autostart.md`](docs/onboard_autostart.md)。该方案只新增启动文件，默认不自动解锁或起飞。
 
 将 FAST-LIO `/cloud_registered` 转换到 MAVROS/PX4 本地坐标系的独立节点、安装外参配置和 Ubuntu 地面测试步骤见 [`docs/cloud_to_mavros.md`](docs/cloud_to_mavros.md)。本阶段不会改变 EGO 或控制器的现有输入。
+
+EGO 改用 MAVROS 里程计和转换点云的独立地面规划配置见 [`docs/ego_mavros_planning.md`](docs/ego_mavros_planning.md)，旧启动入口保持可用，新配置默认将轨迹指令隔离到测试话题。

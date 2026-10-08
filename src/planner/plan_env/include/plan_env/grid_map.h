@@ -43,6 +43,7 @@ struct MappingParameters
   double obstacles_inflation_;
   int inf_grid_;
   string frame_id_;
+  bool require_matching_frame_{false};
   int pose_type_;
   bool enable_virtual_walll_;
   double virtual_ceil_, virtual_ground_;

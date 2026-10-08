@@ -10,6 +10,7 @@
 #include <std_msgs/Empty.h>
 #include <std_msgs/Float64.h>
 #include <vector>
+#include <string>
 #include <visualization_msgs/Marker.h>
 
 #include <optimizer/poly_traj_optimizer.h>
@@ -81,6 +82,8 @@ namespace ego_planner {
         double emergency_time_;
         bool flag_realworld_experiment_;
         bool odom_velocity_in_body_{false};
+        std::string expected_odom_frame_;
+        double minimum_goal_z_{-0.1};
         bool enable_fail_safe_;
         bool enable_ground_height_measurement_;
         bool flag_escape_emergency_;
@@ -127,6 +130,7 @@ namespace ego_planner {
         /* 回调函数 */
         void waypointCallback(const quadrotor_msgs::GoalSetPtr &msg);
         void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
+        void stampedGoalCallback(const geometry_msgs::PoseStampedConstPtr &msg);
         
         /* 轨迹消息转换 */
         void polyTraj2ROSMsg(traj_utils::PolyTraj &poly_msg, traj_utils::MINCOTraj &MINCO_msg);

@@ -161,6 +161,6 @@ roslaunch lio_cloud_to_mavros registered_cloud_to_mavros.launch \
 
 此阶段回退只需在转换终端按 Ctrl+C，输出话题停止；现有定位、视觉转发和旧规划启动保持不变，无需 Git 回退或安装新的 systemd 服务。
 
-**尚未迁移 EGO。** 它仍订阅 `/imu_propagate` 与 `/cloud_registered`。后续应一起切换里程计、转换后点云、地图/轨迹 frame 和 RViz 目标参考系，同时增加估计重置与超时保护。GPS/EKF 校正可能造成投影点云和旧地图不一致；本节点只做明显跳变检测，不保证检测所有 PX4 重置，不会自动清空 EGO 地图，也不是飞行许可。
+**原有 EGO 启动方式仍订阅 `/imu_propagate` 与 `/cloud_registered`。** 可选的新 MAVROS 地面规划配置及测试步骤见 [ego_mavros_planning.md](ego_mavros_planning.md)，它统一里程计、转换点云、地图/轨迹 frame 和 RViz 目标参考系；估计重置与超时联动仍待完成。GPS/EKF 校正可能造成投影点云和旧地图不一致；本节点只做明显跳变检测，不保证检测所有 PX4 重置，不会自动清空 EGO 地图，也不是飞行许可。
 
 当前视觉转发的原点/姿态对齐、PX4 融合配置和控制器的速度处理仍需独立检查。没有完成这些地面验证前，不应将转换成功视为可以直接自动飞行。

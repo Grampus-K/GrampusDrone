@@ -70,6 +70,9 @@
   <exec_depend>traj_utils</exec_depend>
   <exec_depend>traj_opt</exec_depend>
   <exec_depend>path_searching</exec_depend>
+  <exec_depend>lio_cloud_to_mavros</exec_depend>
+  <exec_depend>rviz</exec_depend>
+  <exec_depend>rviz_plugins</exec_depend>
   
 
 

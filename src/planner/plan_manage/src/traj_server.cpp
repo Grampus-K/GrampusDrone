@@ -5,10 +5,12 @@
 #include <std_msgs/Empty.h>
 #include <visualization_msgs/Marker.h>
 #include <ros/ros.h>
+#include <string>
 
 using namespace Eigen;
 
 ros::Publisher pos_cmd_pub;
+std::string command_frame_id = "world";
 
 quadrotor_msgs::PositionCommand cmd;
 // double pos_gain[3] = {0, 0, 0};
@@ -137,7 +139,7 @@ void publish_cmd(Vector3d p, Vector3d v, Vector3d a, Vector3d j, double y, doubl
 {
 
   cmd.header.stamp = ros::Time::now();
-  cmd.header.frame_id = "world";
+  cmd.header.frame_id = command_frame_id;
   cmd.trajectory_flag = quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_READY;
   cmd.trajectory_id = traj_id_;
 
@@ -313,6 +315,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "traj_server");
   // ros::NodeHandle node;
   ros::NodeHandle nh("~");
+  nh.param<std::string>("traj_server/frame_id", command_frame_id, "world");
 
   ros::Subscriber poly_traj_sub = nh.subscribe("planning/trajectory", 10, polyTrajCallback);
   ros::Subscriber heartbeat_sub = nh.subscribe("heartbeat", 10, heartbeatCallback);

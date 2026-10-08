@@ -1,0 +1,10 @@
+<launch>
+    <arg name="planning_frame" default="map" />
+    <node name="ego_mavros_rviz" pkg="rviz" type="rviz"
+          args="-d $(find ego_planner)/launch/include/mavros.rviz -f $(arg planning_frame)">
+        <!-- Goal3DTool's PoseStamped output carries the RViz Fixed Frame. -->
+        <remap from="/goal" to="/ego_mavros/goal" />
+        <!-- Its legacy, unframed GoalSet output is deliberately unused. -->
+        <remap from="/goal_with_id" to="/ego_mavros/unused_goal_with_id" />
+    </node>
+</launch>

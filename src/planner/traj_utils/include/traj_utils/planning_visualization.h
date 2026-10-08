@@ -6,6 +6,7 @@
 #include <iostream>
 #include <ros/ros.h>
 #include <vector>
+#include <string>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@ namespace ego_planner
   {
   private:
     ros::NodeHandle node;
+    std::string frame_id_{"world"};
 
     ros::Publisher goal_point_pub;
     ros::Publisher global_list_pub;

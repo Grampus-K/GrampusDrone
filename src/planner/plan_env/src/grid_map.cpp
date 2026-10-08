@@ -3,6 +3,7 @@
 void GridMap::initMap(ros::NodeHandle &nh)
 {
   node_ = nh;
+  node_.param("grid_map/require_matching_frame", mp_.require_matching_frame_, false);
 
   /* --------------------- 获取地图配置参数 --------------------- */
   // 读取地图基础参数
@@ -374,6 +375,13 @@ void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
  */
 void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
 {
+  if (mp_.require_matching_frame_ && odom->header.frame_id != mp_.frame_id_)
+  {
+    ROS_ERROR_THROTTLE(1.0, "GridMap frame mismatch: expected '%s', received '%s'",
+                       mp_.frame_id_.c_str(), odom->header.frame_id.c_str());
+    return;
+  }
+
   // 若已收到深度图像，则不再处理独立里程计（仅用于初始化）
   if (md_.flag_have_ever_received_depth_)
   {
@@ -410,6 +418,13 @@ void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
  */
 void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 {
+  if (mp_.require_matching_frame_ && img->header.frame_id != mp_.frame_id_)
+  {
+    ROS_ERROR_THROTTLE(1.0, "GridMap frame mismatch: expected '%s', received '%s'",
+                       mp_.frame_id_.c_str(), img->header.frame_id.c_str());
+    return;
+  }
+
   /* 注意：此函数不执行障碍物消除处理！ */
 
   if (!md_.has_odom_)// 仅在有里程计数据时处理点云

@@ -1,0 +1,127 @@
+<launch>
+    <!-- Ground planning only. Same node names as legacy launch: run one at a time. -->
+    <arg name="planning_frame" default="map" />
+    <arg name="rviz" default="false" />
+    <arg name="start_cloud_converter" default="false" />
+    <arg name="cloud_config" default="$(find lio_cloud_to_mavros)/config/registered_cloud_to_mavros.yaml" />
+    <!-- Absolute heights in planning_frame, not heights above the current vehicle. -->
+    <arg name="virtual_ground" default="-0.1" />
+    <arg name="virtual_ceil" default="3.0" />
+    <arg name="visualization_truncate_height" default="3.0" />
+    <arg name="max_vel" default="0.5" />
+    <arg name="max_acc" default="1.0" />
+    <arg name="max_jer" default="5.0" />
+    <arg name="planning_horizon" default="7.5" />
+
+    <arg name="drone_id" value="0"/>
+
+    <arg name="odom_topic" value="/mavros/local_position/odom" />
+    <arg name="odom_velocity_in_body" value="true" />
+
+    <arg name="camera_pose_topic" value="nouse1"/>
+    <arg name="depth_topic" value="/ego_mavros/unused_depth"/>
+    <arg name="cloud_topic" value="/cloud_registered_mavros"/>
+
+    <node pkg="ego_planner" name="drone_$(arg drone_id)_ego_planner_node" type="ego_planner_node" output="screen">
+
+        <remap from="~odom_world" to="$(arg odom_topic)"/>
+        <remap from="~mandatory_stop" to="/mandatory_stop_to_planner"/>
+        <remap from="~planning/broadcast_traj_send" to="/broadcast_traj_from_planner"/>
+        <remap from="~planning/broadcast_traj_recv" to="/broadcast_traj_to_planner"/>
+        <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory"/>
+        <remap from="~planning/data_display" to="/drone_$(arg drone_id)_planning/data_display"/>
+        <remap from="~planning/heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>
+        <remap from="~goal_pose" to="/ego_mavros/goal" />
+        <remap from="~grid_map/odom" to="$(arg odom_topic)"/>
+        <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
+        <remap from="~grid_map/pose"   to = "$(arg camera_pose_topic)"/>
+        <remap from="~grid_map/depth" to = "$(arg depth_topic)"/>
+
+        <param name="fsm/thresh_replan_time" value="1.0" type="double"/>
+        <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+        <param name="fsm/emergency_time" value="1.0" type="double"/>
+        <param name="fsm/realworld_experiment" value="true"/>
+        <param name="fsm/odom_velocity_in_body" value="$(arg odom_velocity_in_body)" type="bool"/>
+        <param name="fsm/use_stamped_goal" value="true" />
+        <param name="fsm/expected_odom_frame" value="$(arg planning_frame)" />
+        <param name="fsm/minimum_goal_z" value="$(arg virtual_ground)" />
+        <param name="visualization/frame_id" value="$(arg planning_frame)" />
+        <param name="fsm/fail_safe" value="true"/>
+        <param name="fsm/ground_height_measurement" value="false"/>
+
+        <param name="grid_map/resolution" value="0.15"/>
+        <param name="grid_map/local_update_range_x" value="5.5"/>
+        <param name="grid_map/local_update_range_y" value="5.5"/>
+        <param name="grid_map/local_update_range_z" value="4.0"/>
+        <param name="grid_map/obstacles_inflation" value="0.6"/>
+        <param name="grid_map/local_map_margin" value="10"/>
+        <param name="grid_map/enable_virtual_wall" value="true"/>
+        <param name="grid_map/virtual_ceil" value="$(arg virtual_ceil)"/>
+        <param name="grid_map/virtual_ground" value="$(arg virtual_ground)"/>
+        <param name="grid_map/ground_height" value="$(arg virtual_ground)"/>
+
+        <param name="grid_map/cx" value="321.04638671875"/>
+        <param name="grid_map/cy" value="243.44969177246094"/>
+        <param name="grid_map/fx" value="387.229248046875"/>
+        <param name="grid_map/fy" value="387.229248046875"/>
+
+        <param name="grid_map/use_depth_filter" value="true"/>
+        <param name="grid_map/depth_filter_tolerance" value="0.15"/>
+        <param name="grid_map/depth_filter_maxdist" value="5.0"/>
+        <param name="grid_map/depth_filter_mindist" value="0.2"/>
+        <param name="grid_map/depth_filter_margin" value="2"/>
+        <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
+        <param name="grid_map/skip_pixel" value="2"/>
+
+        <param name="grid_map/p_hit" value="0.65"/>
+        <param name="grid_map/p_miss" value="0.35"/>
+        <param name="grid_map/p_min" value="0.12"/>
+        <param name="grid_map/p_max" value="0.90"/>
+        <param name="grid_map/p_occ" value="0.80"/>
+        <param name="grid_map/fading_time" value="1000.0"/>
+        <param name="grid_map/min_ray_length" value="0.1"/>
+        <param name="grid_map/max_ray_length" value="4.5"/>
+        <param name="grid_map/visualization_truncate_height" value="$(arg visualization_truncate_height)"/>
+        <param name="grid_map/show_occ_time" value="false"/>
+        <param name="grid_map/pose_type" value="2"/>
+        <param name="grid_map/frame_id" value="$(arg planning_frame)"/>
+        <param name="grid_map/require_matching_frame" value="true" />
+
+        <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
+        <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
+        <param name="manager/polyTraj_piece_length" value="1.5" type="double"/>
+        <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
+        <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+        <param name="manager/use_multitopology_trajs" value="false" type="bool"/>
+        <param name="manager/drone_id" value="$(arg drone_id)"/>
+
+        <param name="optimization/constraint_points_perPiece" value="5" type="int"/>
+        <param name="optimization/weight_obstacle" value="10000.0" type="double"/>
+        <param name="optimization/weight_obstacle_soft" value="5000.0" type="double"/>
+        <param name="optimization/weight_swarm" value="10000.0" type="double"/>
+        <param name="optimization/weight_feasibility" value="10000.0" type="double"/>
+        <param name="optimization/weight_sqrvariance" value="10000.0" type="double"/>
+        <param name="optimization/weight_time" value="10.0" type="double"/>
+        <param name="optimization/obstacle_clearance" value="0.1" type="double"/>
+        <param name="optimization/obstacle_clearance_soft" value="0.5" type="double"/>
+        <param name="optimization/swarm_clearance" value="0.15" type="double"/>
+        <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>
+        <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/>
+        <param name="optimization/max_jer" value="$(arg max_jer)" type="double"/>
+        <param name="optimization/record_opt" value="true"/>
+    </node>
+
+    <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+        <remap from="/position_cmd" to="/ego_mavros/position_cmd"/>
+        <remap from="~planning/trajectory" to="drone_$(arg drone_id)_planning/trajectory"/>
+        <param name="traj_server/time_forward" value="1.0" type="double"/>
+        <param name="traj_server/frame_id" value="$(arg planning_frame)" />
+    </node>
+    <include if="$(arg start_cloud_converter)"
+             file="$(find lio_cloud_to_mavros)/launch/registered_cloud_to_mavros.launch">
+        <arg name="config" value="$(arg cloud_config)" />
+    </include>
+    <include if="$(arg rviz)" file="$(find ego_planner)/launch/mavros_rviz.launch">
+        <arg name="planning_frame" value="$(arg planning_frame)" />
+    </include>
+</launch>

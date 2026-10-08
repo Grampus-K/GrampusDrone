@@ -1,0 +1,90 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Tool Properties
+    Name: Tool Properties
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Enabled: true
+  Global Options:
+    Background Color: 35; 35; 35
+    Fixed Frame: map
+    Frame Rate: 30
+  Displays:
+    - Class: rviz/Grid
+      Name: Reference grid
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 30
+      Reference Frame: <Fixed Frame>
+    - Class: rviz/PointCloud2
+      Name: Converted scan
+      Enabled: true
+      Topic: /cloud_registered_mavros
+      Queue Size: 2
+      Decay Time: 0
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: FlatColor
+      Color: 180; 180; 180
+      Position Transformer: XYZ
+    - Class: rviz/PointCloud2
+      Name: Inflated obstacles
+      Enabled: true
+      Topic: /drone_0_ego_planner_node/grid_map/occupancy_inflate
+      Queue Size: 2
+      Style: Points
+      Size (Pixels): 3
+      Color Transformer: FlatColor
+      Color: 255; 110; 80
+      Position Transformer: XYZ
+    - Class: rviz/Odometry
+      Name: PX4 odometry
+      Enabled: true
+      Topic: /mavros/local_position/odom
+      Keep: 1
+      Position Tolerance: 0
+      Angle Tolerance: 0
+      Shape:
+        Value: Axes
+        Axes Length: 0.5
+        Axes Radius: 0.03
+    - Class: rviz/Marker
+      Name: Goal
+      Enabled: true
+      Marker Topic: /drone_0_ego_planner_node/goal_point
+      Queue Size: 10
+    - Class: rviz/Marker
+      Name: Global path
+      Enabled: true
+      Marker Topic: /drone_0_ego_planner_node/global_list
+      Queue Size: 10
+    - Class: rviz/Marker
+      Name: Planned trajectory
+      Enabled: true
+      Marker Topic: /drone_0_ego_planner_node/optimal_list
+      Queue Size: 10
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+    - Class: rviz_plugins/Goal3DTool
+      Topic: /goal
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 12
+      Pitch: 0.7
+      Yaw: 0.8
+      Target Frame: <Fixed Frame>
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+Window Geometry:
+  Width: 1200
+  Height: 800

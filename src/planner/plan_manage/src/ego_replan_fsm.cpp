@@ -18,6 +18,8 @@ namespace ego_planner
     // Legacy simulator odometry contains world-frame velocity. Real FAST-LIO
     // odometry follows the ROS child-frame twist convention (enabled in launch).
     nh.param("fsm/odom_velocity_in_body", odom_velocity_in_body_, false);
+    nh.param<std::string>("fsm/expected_odom_frame", expected_odom_frame_, "");
+    nh.param("fsm/minimum_goal_z", minimum_goal_z_, -0.1);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
     nh.param("fsm/ground_height_measurement", enable_ground_height_measurement_, false);
 
@@ -32,7 +34,12 @@ namespace ego_planner
     safety_timer_  = nh.createTimer(ros::Duration(0.05), &EGOReplanFSM::checkCollisionCallback, this);
 
     odom_sub_      = nh.subscribe("odom_world", 1, &EGOReplanFSM::odometryCallback, this);
-    waypoint_sub_  = nh.subscribe("/goal", 1, &EGOReplanFSM::waypointCallback, this);
+    bool use_stamped_goal = false;
+    nh.param("fsm/use_stamped_goal", use_stamped_goal, false);
+    if (use_stamped_goal)
+      waypoint_sub_ = nh.subscribe("goal_pose", 1, &EGOReplanFSM::stampedGoalCallback, this);
+    else
+      waypoint_sub_ = nh.subscribe("/goal", 1, &EGOReplanFSM::waypointCallback, this);
 
     poly_traj_pub_ = nh.advertise<traj_utils::PolyTraj>("planning/trajectory", 10);
     data_disp_pub_ = nh.advertise<traj_utils::DataDisp>("planning/data_display", 100);
@@ -444,9 +451,30 @@ start_collision_check:
     return false;
   }
 
+  void EGOReplanFSM::stampedGoalCallback(const geometry_msgs::PoseStampedConstPtr &msg)
+  {
+    if (expected_odom_frame_.empty() || msg->header.frame_id != expected_odom_frame_ || !have_odom_)
+    {
+      ROS_WARN("Goal rejected: require odometry and a goal in frame '%s' (received '%s')",
+               expected_odom_frame_.c_str(), msg->header.frame_id.c_str());
+      return;
+    }
+    const auto &p = msg->pose.position;
+    if (!Eigen::Vector3d(p.x, p.y, p.z).allFinite())
+    {
+      ROS_WARN("Goal rejected: non-finite position");
+      return;
+    }
+    quadrotor_msgs::GoalSetPtr goal(new quadrotor_msgs::GoalSet);
+    goal->goal[0] = p.x;
+    goal->goal[1] = p.y;
+    goal->goal[2] = p.z;
+    waypointCallback(goal);
+  }
+
   void EGOReplanFSM::waypointCallback(const quadrotor_msgs::GoalSetPtr &msg)
   {
-    if (msg->goal[2] < -0.1)
+    if (msg->goal[2] < minimum_goal_z_)
       return;
 
     ROS_INFO("Received goal: %f, %f, %f", msg->goal[0], msg->goal[1], msg->goal[2]);
@@ -459,6 +487,12 @@ start_collision_check:
 
   void EGOReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg)
   {
+    if (!expected_odom_frame_.empty() && msg->header.frame_id != expected_odom_frame_)
+    {
+      ROS_ERROR_THROTTLE(1.0, "Odometry frame mismatch: expected '%s', received '%s'",
+                         expected_odom_frame_.c_str(), msg->header.frame_id.c_str());
+      return;
+    }
     Eigen::Vector3d velocity(msg->twist.twist.linear.x,
                              msg->twist.twist.linear.y,
                              msg->twist.twist.linear.z);
