@@ -44,6 +44,7 @@
 #include <ros/ros.h>
 #include <Eigen/Core>
 #include "IMU_Processing.hpp"
+#include "odometry_full.hpp"
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <visualization_msgs/Marker.h>
@@ -132,6 +133,49 @@ M3D Lidar_R_wrt_IMU(Eye3d);
 MeasureGroup Measures;
 esekfom::esekf<state_ikfom, 12, input_ikfom> kf;
 state_ikfom state_point;
+
+// Additive, scan-rate output only; the legacy MAVROS pose path is unchanged.
+bool odometry_full_enabled = false;
+fast_lio_full::Options odometry_full_options;
+fast_lio_full::GyroSample scan_end_gyro;
+bool scan_end_gyro_valid = false;
+
+void sample_scan_end_gyro(const MeasureGroup &meas)
+{
+    scan_end_gyro_valid = false;
+    if (!odometry_full_enabled || meas.imu.empty()) return;
+    fast_lio_full::GyroSample before, after;
+    if (!fast_lio_full::read_gyro(*meas.imu.back(), odometry_full_options, before)) return;
+    const fast_lio_full::GyroSample *after_ptr = nullptr;
+    if (before.stamp != meas.lidar_end_time)
+    {
+        if (imu_buffer.empty() ||
+            !fast_lio_full::read_gyro(*imu_buffer.front(), odometry_full_options, after)) return;
+        after_ptr = &after;
+    }
+    // Peek at the next queued IMU without consuming it or changing EKF integration.
+    scan_end_gyro_valid = fast_lio_full::interpolate_gyro(before, after_ptr,
+        meas.lidar_end_time, odometry_full_options.max_gyro_gap, scan_end_gyro);
+}
+
+void publish_full_odometry(const ros::Publisher &publisher)
+{
+    if (!odometry_full_enabled) return;
+    if (!scan_end_gyro_valid || effct_feat_num < 1)
+    {
+        ROS_WARN_THROTTLE(5.0, "odometry_full skipped: no aligned gyro or no effective LiDAR features");
+        return;
+    }
+    nav_msgs::Odometry message;
+    const ros::Time stamp = ros::Time().fromSec(lidar_end_time);
+    if (!fast_lio_full::make_odometry(state_point, kf.get_P(), scan_end_gyro,
+                                     stamp, odometry_full_options, message))
+    {
+        ROS_WARN_THROTTLE(5.0, "odometry_full skipped: invalid state, timestamp or covariance");
+        return;
+    }
+    publisher.publish(message); // Both covariance matrices are ready before publishing.
+}
 
 // ---------- 高频发布用的独立状态（与 kf 解耦） //grampus added----------
 std::mutex pub_state_mtx;
@@ -540,6 +584,8 @@ bool sync_packages(MeasureGroup &meas)
         imu_buffer.pop_front();
     }
 
+    sample_scan_end_gyro(meas);
+
     lidar_buffer.pop_front();
     time_buffer.pop_front();
     lidar_pushed = false;
@@ -898,6 +944,19 @@ int main(int argc, char** argv)
     nh.param<bool>("publish/scan_publish_en",scan_pub_en, true);
     nh.param<bool>("publish/dense_publish_en",dense_pub_en, true);
     nh.param<bool>("publish/scan_bodyframe_pub_en",scan_body_pub_en, true);
+    nh.param<bool>("odometry_full/enabled", odometry_full_enabled, false);
+    nh.param<double>("odometry_full/covariance_scale", odometry_full_options.covariance_scale, 1.0);
+    nh.param<double>("odometry_full/position_stddev_floor", odometry_full_options.position_stddev_floor, 0.05);
+    nh.param<double>("odometry_full/orientation_stddev_floor", odometry_full_options.orientation_stddev_floor, 0.03);
+    nh.param<double>("odometry_full/linear_stddev_floor", odometry_full_options.linear_stddev_floor, 0.10);
+    nh.param<double>("odometry_full/angular_stddev_floor", odometry_full_options.angular_stddev_floor, 0.03);
+    nh.param<double>("odometry_full/gyro_noise_stddev", odometry_full_options.gyro_noise_stddev, 0.02);
+    nh.param<double>("odometry_full/max_gyro_gap", odometry_full_options.max_gyro_gap, 0.02);
+    if (odometry_full_enabled && !odometry_full_options.valid())
+    {
+        ROS_ERROR("Invalid odometry_full parameters; disabling ONLY the additional output");
+        odometry_full_enabled = false;
+    }
     nh.param<int>("max_iteration",NUM_MAX_ITERATIONS,4);
     nh.param<string>("map_file_path",map_file_path,"");
     nh.param<string>("common/lid_topic",lid_topic,"/livox/lidar");
@@ -992,6 +1051,12 @@ int main(int argc, char** argv)
             ("/Laser_map", 100000);
     ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry> 
             ("/Odometry", 100000);
+    ros::Publisher pubOdometryFull;
+    if (odometry_full_enabled)
+    {
+        pubOdometryFull = nh.advertise<nav_msgs::Odometry>("/fast_lio/odometry_full", 10);
+        ROS_INFO("Full odometry enabled: world pose, IMU-body twist, scan-end time; NOT routed to MAVROS");
+    }
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
             ("/path", 100000);
     pub_latest_odometry = nh.advertise<nav_msgs::Odometry>
@@ -1126,6 +1191,7 @@ int main(int argc, char** argv)
 
             /******* Publish odometry *******/
             publish_odometry(pubOdomAftMapped);
+            publish_full_odometry(pubOdometryFull);
 
             /*** add the feature points to map kdtree ***/
             t3 = omp_get_wtime();

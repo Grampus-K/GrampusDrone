@@ -53,7 +53,9 @@ rosparam get /drone_0_ego_planner_node/fsm/odom_velocity_in_body
 
 ## 未来改用 `/mavros/odometry/out`
 
-本次只统一源里程计的线速度坐标，尚不能直接把 FAST-LIO 话题 remap 到 MAVROS：
+现已增加独立的第一阶段输出 `/fast_lio/odometry_full`，含同帧角速度和变换后的协方差；定义、限制、参数和 Ubuntu 测试步骤见 [FAST-LIO 完整里程计](fastlio_full_odometry.md)。下文关于缺失字段和旧协方差的说明仍适用于原 `/Odometry`、`/imu_propagate`，不适用于新话题。新话题暂未接入 MAVROS。
+
+速度坐标统一和第一阶段完整输出仍不足以直接把 FAST-LIO 话题 remap 到 MAVROS：
 
 1. 确认本机 MAVROS odometry 插件实际订阅名、frame 参数和 TF 要求；不同安装配置可能不同。
 2. 将 FAST-LIO 的局部参考系与输出参考系、IMU body 与飞行器 base_link 对齐。涉及安装平移时，速度还需要考虑角速度叉乘杆臂项；不能只改 `frame_id` 或 `child_frame_id` 的字符串。

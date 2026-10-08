@@ -91,3 +91,8 @@ add_dependencies(fastlio_mapping
 )
 target_link_libraries(fastlio_mapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
 target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
+
+if(CATKIN_ENABLE_TESTING)
+  add_executable(fast_lio_odometry_covariance_test test/odometry_covariance_test.cpp)
+  add_test(NAME fast_lio_odometry_covariance COMMAND fast_lio_odometry_covariance_test)
+endif()

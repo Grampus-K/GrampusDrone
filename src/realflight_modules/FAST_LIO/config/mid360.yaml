@@ -29,6 +29,18 @@ publish:
     dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
     scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
 
+# Phase 1: observation only. No remap to MAVROS and no estimator tuning.
+# Stddev values are conservative starting floors, NOT calibrated accuracy.
+odometry_full:
+    enabled: true
+    covariance_scale: 1.0          # >= 1; scales output covariance, never EKF P
+    position_stddev_floor: 0.05    # m
+    orientation_stddev_floor: 0.03 # rad; world fixed-axis small-angle uncertainty
+    linear_stddev_floor: 0.10      # m/s, IMU body
+    angular_stddev_floor: 0.03     # rad/s, IMU body
+    gyro_noise_stddev: 0.02        # rad/s; per-sample fallback/floor, not mapping/gyr_cov
+    max_gyro_gap: 0.02             # seconds, maximum gap on EACH side of scan-end time
+
 pcd_save:
     pcd_save_en: false
     interval: -1                 # how many LiDAR frames saved in each pcd file; 
