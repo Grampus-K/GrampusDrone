@@ -1,0 +1,8 @@
+<launch>
+    <!-- Standalone ground-test converter; never starts EGO, control, or the FCU. -->
+    <arg name="config" default="$(find lio_cloud_to_mavros)/config/registered_cloud_to_mavros.yaml" />
+    <node pkg="lio_cloud_to_mavros" type="registered_cloud_to_mavros.py"
+          name="registered_cloud_to_mavros" output="screen" respawn="false">
+        <rosparam command="load" file="$(arg config)" />
+    </node>
+</launch>

@@ -1,0 +1,47 @@
+# Only this experimental node reads this file. Existing LIO/MAVROS/EGO are unchanged.
+cloud_topic: /cloud_registered
+lio_odom_topic: /Odometry
+mavros_odom_topic: /mavros/local_position/odom
+output_topic: /cloud_registered_mavros
+
+# R_BL / t_BL: lidar DATA coordinate origin expressed in MAVROS base_link (FLU).
+# User measurement: horizontally centered, 7 cm above base_link, axes aligned.
+# If the housing center is not the lidar data origin, correct this translation!
+# x forward, y left, z up; metres. RPY in degrees, Rz(yaw)*Ry(pitch)*Rx(roll).
+lidar_in_base_link:
+  translation: [0.0, 0.0, 0.07]
+  rpy_degrees: [0.0, 0.0, 0.0]
+
+# Read T_IL directly from the running FAST-LIO parameters; never copy a guess.
+# FAST-LIO uses p_imu = extrinsic_R * p_lidar + extrinsic_T.
+# Online extrinsic estimation must be OFF because /Odometry does not carry T_IL.
+fastlio_mapping_namespace: /mapping
+lio_world_frame: world
+lio_imu_frame: body
+mavros_body_frame: base_link
+# Empty means use MAVROS odometry's actual header.frame_id; mismatch is a fault.
+output_frame: ""
+
+# Enable on the current guarded onboard stack. Does not treat Bool as EKF health.
+require_vision_healthy: true
+vision_health_topic: /lio_to_mavros/healthy
+mavros_state_topic: /mavros/state
+
+# All durations in seconds. Use source stamps, never receipt time for projection.
+history_seconds: 3.0
+max_pose_samples: 1000
+max_pending_clouds: 5
+max_points: 200000
+max_interpolation_gap: 0.15
+max_cloud_wait: 0.5
+max_stamp_error: 0.5
+odom_receipt_timeout: 0.5
+output_timeout: 0.5
+clock_step_tolerance: 0.5
+
+# Latch an error on large pose discontinuities; manual restart after inspection.
+# Not a substitute for PX4 reset counters/estimator-health checks before flight.
+max_position_step: 0.5
+max_speed: 20.0
+max_angle_step_degrees: 20.0
+max_angular_speed: 6.0

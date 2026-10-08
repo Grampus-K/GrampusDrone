@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>lio_cloud_to_mavros</name>
+  <version>0.1.0</version>
+  <description>Project FAST-LIO registered scans into the PX4 local frame for ground-tested planning.</description>
+  <maintainer email="654369841@qq.com">Grampus-K</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>mavros_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <test_depend>python3-nose</test_depend>
+  <test_depend>python3-numpy</test_depend>
+</package>
