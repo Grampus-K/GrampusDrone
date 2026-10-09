@@ -1,0 +1,30 @@
+# Used only when preview or full odometry is enabled. R_X_Y maps Y into X.
+full:
+  input_topic: /fast_lio/odometry_full
+  output_topic: /mavros/odometry/out
+  preview_topic: /lio_to_mavros/odometry_preview
+  output_frame: odom
+  output_child_frame: base_link
+  mapping_namespace: /mapping
+  # Assumes the mounting reference is the LiDAR coordinate origin.
+  lidar_in_base:
+    translation: [0.0, 0.0, 0.07]
+    rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  # Gravity-aligned arbitrary-heading local frame; no PX4 feedback alignment.
+  zero_position: true
+  zero_yaw: false
+  reference_yaw: 0.0  # radians, fixed yaw rotation W -> output
+  stable_seconds: 5.0
+  timeout: 0.5
+  max_age: 0.5
+  future_tolerance: 0.05
+  clock_tolerance: 0.5
+  stationary_speed: 0.35
+  stationary_angular: 0.2
+  stationary_drift: 0.5
+  stationary_angle: 0.1
+  max_position: 1000.0
+  max_speed: 20.0
+  max_angular: 12.0
+  max_step: 1.0
+  max_angle_step: 0.35

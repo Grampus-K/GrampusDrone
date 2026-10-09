@@ -1,5 +1,9 @@
 # Orin NX 上电自动启动
 
+完整里程计双模式及预览见 [lio_to_mavros 实施与 Ubuntu 测试](lio_to_mavros_dual_output.md)。默认仍是 vision_pose。
+
+新增启动参数 output_mode、odometry_preview、lio_full_config；systemd 对应 LIO_OUTPUT_MODE、LIO_ODOMETRY_PREVIEW、LIO_FULL_CONFIG。就绪检查读取当前正式模式，预览不参与就绪。桥接器现在不自动 respawn，避免丢失参考后静默恢复；地面检查后人工重启。
+
 FAST-LIO 的 `/Odometry`、`/imu_propagate` 与规划器的速度坐标约定，见 [里程计坐标说明](odometry_frames.md)。
 
 自动启动只让系统进入待飞状态，不会自动解锁或起飞。定位门控现在会在数据明显异常时停止向 MAVROS 发布视觉位姿；原来的 ready_go.sh 和 PX4 参数未改动。

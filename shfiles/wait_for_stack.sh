@@ -78,8 +78,19 @@ rosrun mavros mavcmd long 511 31 5000 0 0 0 0 0
 
 wait_for_topic /livox/lidar
 wait_for_topic /livox/imu
-wait_for_topic /Odometry
-wait_for_healthy_odometry
-wait_for_topic /mavros/vision_pose/pose
+LIO_MODE="$(rosparam get /lio_to_mavros/output_mode)"
+case "$LIO_MODE" in
+    vision_pose)
+        wait_for_topic /Odometry
+        wait_for_healthy_odometry
+        wait_for_topic /mavros/vision_pose/pose
+        ;;
+    odometry)
+        wait_for_topic "$(rosparam get /lio_to_mavros/full/input_topic)"
+        wait_for_healthy_odometry
+        wait_for_topic "$(rosparam get /lio_to_mavros/full/output_topic)"
+        ;;
+    *) echo "[error] unknown lio_to_mavros output_mode: $LIO_MODE" >&2; exit 1 ;;
+esac
 wait_for_topic /mavros/local_position/odom
 echo "[ready] GrampusDrone onboard topics are available."

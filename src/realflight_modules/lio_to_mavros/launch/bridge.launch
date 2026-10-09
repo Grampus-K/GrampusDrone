@@ -1,0 +1,14 @@
+<launch>
+  <arg name="output_mode" default="vision_pose" />
+  <arg name="odometry_preview" default="false" />
+  <arg name="full_config" default="$(find lio_to_mavros)/config/full_odometry.yaml" />
+  <arg name="auto_restart_before_first_publish" default="false" />
+  <!-- Keep the parent stack alive, but never respawn into a new reference. -->
+  <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="lio_to_mavros"
+        output="screen" respawn="false">
+    <rosparam command="load" file="$(arg full_config)" />
+    <param name="output_mode" value="$(arg output_mode)" />
+    <param name="odometry_preview" value="$(arg odometry_preview)" />
+    <param name="auto_restart_before_first_publish" value="$(arg auto_restart_before_first_publish)" />
+  </node>
+</launch>

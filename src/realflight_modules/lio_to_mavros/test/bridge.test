@@ -1,0 +1,45 @@
+<launch>
+  <rosparam ns="mapping">
+    extrinsic_est_en: false
+    extrinsic_T: [-0.011, -0.02329, 0.04412]
+    extrinsic_R: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  </rosparam>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="test_enu_ned"
+        args="0 0 0 0.7071067811865476 0.7071067811865476 0 0 odom odom_ned" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="test_flu_frd"
+        args="0 0 0 1 0 0 0 base_link base_link_frd" />
+
+  <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="legacy" required="true">
+    <param name="stable_seconds" value="0.2" />
+    <remap from="/Odometry" to="/test/legacy_input" />
+    <remap from="/mavros/vision_pose/pose" to="/test/legacy_pose" />
+  </node>
+  <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="preview" required="true">
+    <rosparam command="load" file="$(find lio_to_mavros)/config/full_odometry.yaml" />
+    <param name="odometry_preview" value="true" />
+    <param name="stable_seconds" value="0.2" />
+    <param name="full/stable_seconds" value="0.2" />
+    <param name="full/input_topic" value="/test/preview_input" />
+    <param name="full/preview_topic" value="/test/preview_output" />
+    <remap from="/Odometry" to="/test/legacy_input" />
+    <remap from="/mavros/vision_pose/pose" to="/test/preview_pose" />
+  </node>
+  <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="formal" required="true">
+    <rosparam command="load" file="$(find lio_to_mavros)/config/full_odometry.yaml" />
+    <param name="output_mode" value="odometry" />
+    <param name="full/stable_seconds" value="0.2" />
+    <param name="full/input_topic" value="/test/formal_input" />
+    <param name="full/output_topic" value="/test/formal_output" />
+    <remap from="/mavros/state" to="/test/formal_state" />
+    <remap from="/mavros/vision_pose/pose" to="/test/forbidden_pose" />
+  </node>
+  <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="armed" required="true">
+    <rosparam command="load" file="$(find lio_to_mavros)/config/full_odometry.yaml" />
+    <param name="output_mode" value="odometry" />
+    <param name="full/stable_seconds" value="0.2" />
+    <param name="full/input_topic" value="/test/formal_input" />
+    <param name="full/output_topic" value="/test/armed_output" />
+    <remap from="/mavros/state" to="/test/armed_state" />
+  </node>
+  <test pkg="lio_to_mavros" type="test_bridge.py" name="bridge_integration" time-limit="90" />
+</launch>

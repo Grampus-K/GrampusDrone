@@ -1,12 +1,5 @@
 # lio_to_mavros
 
-#### 介绍
-fast-lio2里程计传给mavros的功能包
+一个节点，默认 vision_pose，可选完整 odometry 和隔离预览。
 
-#### 使用说明
-
-- 放在工作空间的src下就可以了，
-- 然后安装sudo apt install ros-noetic-mavros-extras  这样才有mavros/vision_pose/pose话题
-- 启动好fastlio2，并设置好ekf2 aid mask和ekf2 hgt mode参数
-- 输入rosrun lio_to_mavros lio_to_mavros_node开启这个节点
-
+请阅读 [实施与 Ubuntu 测试](../../../docs/lio_to_mavros_dual_output.md) 的坐标、参数、测试和回退步骤。

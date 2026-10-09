@@ -6,6 +6,9 @@ FCU_DEVICE="${FCU_DEVICE:-/dev/ttyACM0}"
 FCU_BAUD="${FCU_BAUD:-57600}"
 START_CONTROLLER="${START_CONTROLLER:-false}"
 START_PLANNER="${START_PLANNER:-false}"
+LIO_OUTPUT_MODE="${LIO_OUTPUT_MODE:-vision_pose}"
+LIO_ODOMETRY_PREVIEW="${LIO_ODOMETRY_PREVIEW:-false}"
+LIO_FULL_CONFIG="${LIO_FULL_CONFIG:-${WORKSPACE}/src/realflight_modules/lio_to_mavros/config/full_odometry.yaml}"
 
 python3 "${WORKSPACE}/shfiles/wait_for_stable_clock.py"
 
@@ -21,7 +24,10 @@ fi
 roslaunch px4ctrl onboard_stack.launch \
     fcu_url:="${FCU_DEVICE}:${FCU_BAUD}" \
     start_controller:="${START_CONTROLLER}" \
-    start_planner:="${START_PLANNER}" &
+    start_planner:="${START_PLANNER}" \
+    output_mode:="${LIO_OUTPUT_MODE}" \
+    odometry_preview:="${LIO_ODOMETRY_PREVIEW}" \
+    lio_full_config:="${LIO_FULL_CONFIG}" &
 LAUNCH_PID=$!
 
 python3 "${WORKSPACE}/shfiles/monitor_system_time.py" &
