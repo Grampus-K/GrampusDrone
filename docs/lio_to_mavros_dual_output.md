@@ -174,6 +174,23 @@ ROS 测试只使用合成消息、隔离 `/test/*` 话题和测试 TF，不要�
 本机因编译器 SSE 内联汇编限制仅测试命令关闭 Eigen 向量化，仓库构建不关闭）。
 Windows 无 ROS，未执行 ROS 节点编译、rostest、Orin 或 PX4 实机融合测试。
 
+若结果出现 `MISSING-rostest-test_bridge.xml`，表示 rostest 未生成预期结果文件，
+不是具体的坐标转换断言失败。早期版本的 `test/bridge.test` 漏写了 `<test>` 必需的
+`test-name` 属性，导致 ROS Noetic 在启动测试前解析失败；现已补齐。
+同步修复后，保持真实飞控链路停止，重新执行上面的编译与 `run_tests_lio_to_mavros` 命令。
+`catkin_test_results` 只读取结果，不会重新运行测试。
+
+若重跑仍失败，单独运行并保留完整输出：
+
+```bash
+source devel/setup.bash
+set -o pipefail
+rostest lio_to_mavros bridge.test --text 2>&1 | tee /tmp/lio_bridge_rostest.log
+catkin_test_results --verbose build/test_results/lio_to_mavros
+```
+
+`--text` 用于在终端查看错误；修复问题后仍需重新运行 catkin 测试目标，刷新正式 XML 结果。
+
 ## 6. 默认旧模式回归
 
 ```bash

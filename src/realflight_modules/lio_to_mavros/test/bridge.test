@@ -41,5 +41,5 @@
     <param name="full/output_topic" value="/test/armed_output" />
     <remap from="/mavros/state" to="/test/armed_state" />
   </node>
-  <test pkg="lio_to_mavros" type="test_bridge.py" name="bridge_integration" time-limit="90" />
+  <test pkg="lio_to_mavros" type="test_bridge.py" test-name="bridge_integration" name="bridge_integration" time-limit="90" />
 </launch>
