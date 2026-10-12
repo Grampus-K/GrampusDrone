@@ -256,11 +256,15 @@ rosversion mavros_extras
 rostopic info /mavros/odometry/out
 rosparam get /mavros/odometry
 rosparam get /mapping
-rosrun tf2_ros tf2_echo odom_ned odom
-rosrun tf2_ros tf2_echo base_link_frd base_link
+rosrun tf tf_echo odom_ned odom
+rosrun tf tf_echo base_link_frd base_link
 ```
 
 后两条分别持续运行，读完 Ctrl+C。必须看到前文纯旋转，不能凭 frame 字符串判断。
+ROS1 Noetic 使用 `tf` 包的 `tf_echo`；若找不到该程序，安装 `ros-noetic-tf`。
+“找不到可执行文件”表示查询工具未启动，不能据此判断 TF 缺失。
+两组平移均应为 `[0,0,0]`；四元数按 `[x,y,z,w]` 顺序，分别约为
+`[0.707107,0.707107,0,0]` 和 `[1,0,0,0]`，整体取负等价。
 缺少 TF 时检查安装版 MAVROS 的静态 TF 发布配置；先查现有树，不盲目重复启动发布器。
 标准版本通常由 MAVROS 提供轴转换。本桥接器检查失败时不会发送正式数据。
 `/mavros/odometry/out` 应有 MAVROS 订阅者，pose 与 odometry 不应同时有外部测量发布者。
