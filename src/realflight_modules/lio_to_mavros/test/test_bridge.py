@@ -11,13 +11,14 @@ import rostest
 from geometry_msgs.msg import PoseStamped
 from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 
 
 class BridgeTest(unittest.TestCase):
     def setUp(self):
-        self.messages = {key: [] for key in ("legacy", "preview_pose", "preview", "formal", "armed", "forbidden")}
+        self.messages = {key: [] for key in ("legacy", "preview_pose", "preview", "formal", "armed", "forbidden", "stale_state")}
         self.health = {}
+        self.status = {}
         self.subscribers = []
         for key, topic, kind in (
             ("legacy", "/test/legacy_pose", PoseStamped),
@@ -26,25 +27,33 @@ class BridgeTest(unittest.TestCase):
             ("formal", "/test/formal_output", Odometry),
             ("armed", "/test/armed_output", Odometry),
             ("forbidden", "/test/forbidden_pose", PoseStamped),
+            ("stale_state", "/test/stale_output", Odometry),
         ):
             self.subscribers.append(rospy.Subscriber(topic, kind, lambda m, k=key: self.messages[k].append(m)))
-        for node in ("legacy", "preview", "formal", "armed"):
+        for node in ("legacy", "preview", "formal", "armed", "stale_state"):
             self.subscribers.append(rospy.Subscriber("/" + node + "/healthy", Bool,
                 lambda m, k=node: self.health.update({k: m.data})))
         self.subscribers.append(rospy.Subscriber("/preview/preview/healthy", Bool,
             lambda m: self.health.update({"preview_full": m.data})))
+        for node in ("formal", "stale_state"):
+            self.subscribers.append(rospy.Subscriber("/" + node + "/status", String,
+                lambda m, k=node: self.status.update({k: m.data})))
         self.old = rospy.Publisher("/test/legacy_input", Odometry, queue_size=10)
         self.preview = rospy.Publisher("/test/preview_input", Odometry, queue_size=10)
         self.formal = rospy.Publisher("/test/formal_input", Odometry, queue_size=10)
         self.state = rospy.Publisher("/test/formal_state", State, queue_size=10)
         self.armed_state = rospy.Publisher("/test/armed_state", State, queue_size=10)
+        self.stale_state = rospy.Publisher("/test/stale_state", State, queue_size=10)
+        self.next_state_at = 0.0
         self.stamps = set()
+        expected_connections = ((self.old, 2), (self.preview, 1), (self.formal, 3),
+                                (self.state, 1), (self.armed_state, 1), (self.stale_state, 1))
         deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and (self.old.get_num_connections() < 2 or
-                self.preview.get_num_connections() < 1 or self.formal.get_num_connections() < 2 or
-                self.state.get_num_connections() < 1 or self.armed_state.get_num_connections() < 1):
+        while time.monotonic() < deadline and any(
+                pub.get_num_connections() < count for pub, count in expected_connections):
             time.sleep(.05)
-        self.assertEqual(self.old.get_num_connections(), 2)
+        for pub, count in expected_connections:
+            self.assertEqual(pub.get_num_connections(), count, pub.resolved_name)
         self.last = None
 
     def measurement(self):
@@ -62,10 +71,20 @@ class BridgeTest(unittest.TestCase):
             m.twist.covariance[7*i] = .03
         return m
 
-    def pump(self, duration, preview_mode="good", formal_mode="good", connected=True):
+    def pump(self, duration, preview_mode="good", formal_mode="good", connected=True,
+             send_stale_state=True):
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
-            self.state.publish(State(connected=connected, armed=False))
+            # Heartbeat-like state cadence, intentionally just slower than 1 Hz.
+            # The old 1 s receipt timeout would latch despite healthy odometry.
+            if time.monotonic() >= self.next_state_at:
+                self.state.publish(State(connected=connected, armed=False))
+                if send_stale_state:
+                    self.stale_state.publish(State(connected=True, armed=False))
+                self.next_state_at = time.monotonic() + 1.1
+            # An explicit disconnect must not wait for the heartbeat timeout.
+            if not connected:
+                self.state.publish(State(connected=False, armed=False))
             self.armed_state.publish(State(connected=True, armed=True))
             m = self.measurement()
             self.old.publish(m)
@@ -83,13 +102,14 @@ class BridgeTest(unittest.TestCase):
             time.sleep(.05)
 
     def test_end_to_end(self):
-        self.pump(2.5)
-        for key in ("legacy", "preview_pose", "preview", "formal"):
+        self.pump(4.5)
+        for key in ("legacy", "preview_pose", "preview", "formal", "stale_state"):
             self.assertGreater(len(self.messages[key]), 2, key)
         self.assertFalse(self.messages["armed"])
         self.assertFalse(self.messages["forbidden"])
         self.assertFalse(self.health.get("armed", True))
         self.assertTrue(self.health["formal"])
+        self.assertTrue(self.health["stale_state"])
         pose = self.messages["legacy"][-1]
         self.assertAlmostEqual(pose.pose.position.x, 0)
         self.assertAlmostEqual(pose.pose.position.y, 0)
@@ -101,6 +121,16 @@ class BridgeTest(unittest.TestCase):
         stamps = [m.header.stamp.to_nsec() for m in self.messages["formal"]]
         self.assertEqual(stamps, sorted(set(stamps)))
         self.assertEqual(self.messages["preview"][-1].header.frame_id, "lio_preview_odom")
+        # State loss must still latch even while fresh odometry keeps arriving.
+        self.pump(3.5, send_stale_state=False)
+        self.assertFalse(self.health["stale_state"])
+        self.assertIn("MAVROS state expired", self.status["stale_state"])
+        count = len(self.messages["stale_state"])
+        self.stale_state.publish(State(connected=True, armed=False))
+        self.pump(.3)
+        self.assertEqual(len(self.messages["stale_state"]), count)
+        self.assertFalse(self.health["stale_state"])
+        self.assertTrue(self.health["formal"])
         # Duplicate samples do not create additional measurements.
         time.sleep(.1)
         count = len(self.messages["formal"])
@@ -117,7 +147,10 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(len(self.messages["preview"]), count)
         # Disconnect latches the formal output; reconnect never re-zeros it.
         self.pump(.3, connected=False)
+        self.assertFalse(self.health["formal"])
+        self.assertIn("MAVROS disconnected", self.status["formal"])
         count = len(self.messages["formal"])
+        self.state.publish(State(connected=True, armed=False))
         self.pump(.5, connected=True)
         self.assertEqual(len(self.messages["formal"]), count)
         self.assertFalse(self.health["formal"])

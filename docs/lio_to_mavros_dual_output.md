@@ -134,6 +134,11 @@ PX4 1.17 依据：
 初始化需连续静止 5 秒，检查线速度、角速度、位置漂移和姿态漂移。
 正式模式还需新鲜、connected 的 MAVROS state 且未解锁；解锁后才启动会锁止。
 已开放后允许正常解锁运行，不自动归零。
+`full/mavros_state_timeout` 默认 3.0 s，按单调时钟的消息接收时间判断。
+MAVROS state 跟随飞控心跳（实测约 1 Hz），原来硬编码 1.0 s 会因正常抖动误锁止；
+该超时与 10 Hz 里程计的 `full/timeout=0.5 s` 分开，不能混用。
+收到显式 `connected=false` 仍立即锁止；超过状态超时同样锁止，重新收到心跳不自动恢复。
+状态超时的 FAULT 消息会报告实际 age 和配置 limit；预览不使用该连接门控。
 完整路径故障一律锁止到进程重启：NaN/Inf、四元数、协方差、位置/速度/角速度超限、
 时间戳回退/过旧/未来、姿态/位置跳变、发布序号回退、时钟跳变、断流、正式模式断连。
 seq 32 位溢出被区别处理；没有 reset 字段时，小幅或未显现的地图重置仍可能无法检测，
@@ -167,12 +172,15 @@ source devel/setup.bash
 ROS 测试只使用合成消息、隔离 `/test/*` 话题和测试 TF，不要同时运行真实飞控链路。
 它检查默认 pose 回归、预览隔离、正式模式不发 pose、扫描时间戳、重复帧、断连锁止、
 已解锁启动拦截、旧输入超时以及非法模式/remap 拒绝。
+新增回归场景以 1.1 s 间隔发送 MAVROS state，验证正常低频心跳不误锁止；
+另一个仅测试用实例验证里程计持续到达时 state 停流仍锁止、重连不恢复。
 数学测试覆盖安装组合/逆变换、7 cm、yaw/roll/pitch、安装旋转、杆臂符号、四元数 ± 等价、
 两个雅可比有限差分、100 组随机 PSD/交叉协方差、非法输入和时间/重启状态。
 
 本次 Windows 实际完成：16 项 C++ GoogleTest 全通过（Zig/Clang 0.13、Eigen 3.4、GoogleTest 1.14，
 本机因编译器 SSE 内联汇编限制仅测试命令关闭 Eigen 向量化，仓库构建不关闭）。
 Windows 无 ROS，未执行 ROS 节点编译、rostest、Orin 或 PX4 实机融合测试。
+心跳超时修复后的新增 ROS 回归场景也需在 Ubuntu 运行，不能沿用修改前的 PASS 作为验证。
 
 若结果出现 `MISSING-rostest-test_bridge.xml`，表示 rostest 未生成预期结果文件，
 不是具体的坐标转换断言失败。早期版本的 `test/bridge.test` 漏写了 `<test>` 必需的
@@ -225,6 +233,8 @@ roslaunch px4ctrl onboard_stack.launch \
 另开终端：
 
 ```bash
+rosparam get /lio_to_mavros/output_mode
+rosparam get /lio_to_mavros/odometry_preview
 rostopic echo -n 1 /lio_to_mavros/preview/status
 rostopic hz /fast_lio/odometry_full
 rostopic hz /lio_to_mavros/odometry_preview
@@ -236,6 +246,9 @@ rostopic hz /mavros/vision_pose/pose
 ```
 
 预览应约等于上游 10 Hz，frame 是 `lio_preview_odom/lio_preview_base_link`，MAVROS 不订阅预览。
+先确认实际模式为 `vision_pose`、预览为 `true`；`/lio_to_mavros/healthy` 属于旧 pose，
+`/lio_to_mavros/preview/healthy` 与 `/lio_to_mavros/preview/status` 属于完整预览，两者状态独立。
+当前旧 pose 不发布根 `/lio_to_mavros/status`；若根话题有输出，核对 `rosnode info` 的发布者及运行模式。
 检查脚本匹配同时间戳输入输出，检查有限性、对称/PSD、杆臂和速度/协方差传播、参考固定；
 首对数据只推算固定参考，所以它不验证绝对航向、安装准确性，也不替代飞控融合验证。
 分别保持静止、沿 x/y/z 平移、绕 x/y/z 缓慢旋转并停稳，重复运行检查；确认方向及速度回零。
@@ -288,6 +301,10 @@ GPS+EV yaw 时必须明确绝对航向对齐，不能把 `zero_yaw` 当作校准
 约 10 Hz 是否能可靠融合必须看飞控结果；不能用反复更新时间戳来满足频率要求。
 
 ## 9. 正式地面接入与回退
+
+若先读到 READY、随后 healthy=false，两次读取之间可能已故障；立即重读根 status，
+保留 FAULT 原因，再考虑地面重启。有话题发布者不代表持续发消息。
+实际模式以参数和 `rosnode info /lio_to_mavros` 为准，不以另一终端曾输入的 launch 命令为准。
 
 停服务/旧 launch，在地面未解锁状态启动：
 

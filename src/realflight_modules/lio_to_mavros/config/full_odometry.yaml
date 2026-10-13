@@ -16,6 +16,9 @@ full:
   reference_yaw: 0.0  # radians, fixed yaw rotation W -> output
   stable_seconds: 5.0
   timeout: 0.5
+  # Formal mode only: allow jitter in the roughly 1 Hz MAVROS state heartbeat.
+  # Explicit connected=false still latches a fault immediately after READY.
+  mavros_state_timeout: 3.0
   max_age: 0.5
   future_tolerance: 0.05
   clock_tolerance: 0.5

@@ -99,6 +99,10 @@ class FullOdometryBridge {
     priv_.param<std::string>("full/mapping_namespace",mapping_ns_,"/mapping");
     priv_.param<std::string>("full/output_frame",parent_,"odom");
     priv_.param<std::string>("full/output_child_frame",child_,"base_link");
+    // MAVROS state follows FCU heartbeats (about 1 Hz), not odometry rate.
+    priv_.param("full/mavros_state_timeout",state_timeout_,3.0);
+    if (!std::isfinite(state_timeout_) || state_timeout_ <= 0)
+      throw std::invalid_argument("full/mavros_state_timeout must be finite and positive");
     std::string topic;
     if (preview_) {
       priv_.param<std::string>("full/preview_topic",topic,"/lio_to_mavros/odometry_preview");
@@ -128,7 +132,11 @@ class FullOdometryBridge {
     const double steady=steadySeconds();
     guard_.tick(ros::Time::now().toSec(),steady);
     if (steady-last_config_check_>=1.0) { checkExtrinsics(); last_config_check_=steady; }
-    if (!preview_ && guard_.ready() && !connected(steady)) guard_.fault("MAVROS disconnected or state expired");
+    if (!preview_ && guard_.ready() && !connected(steady)) {
+      if (!state_seen_ || !state_.connected) guard_.fault("MAVROS disconnected");
+      else guard_.fault("MAVROS state expired (age="+std::to_string(steady-state_at_)+
+                        " s, limit="+std::to_string(state_timeout_)+" s)");
+    }
     if (guard_.failed()) report("FAULT: "+guard_.reason());
   }
 
@@ -140,7 +148,9 @@ class FullOdometryBridge {
     std_msgs::String s; s.data=text; status_.publish(s);
     ROS_INFO_STREAM((preview_?"Odometry preview: ":"Odometry output: ")<<text);
   }
-  bool connected(double now) const { return state_seen_ && state_.connected && now-state_at_<1.0; }
+  bool connected(double now) const {
+    return state_seen_ && state_.connected && now-state_at_>=0 && now-state_at_<state_timeout_;
+  }
   void onState(const mavros_msgs::State::ConstPtr &m) {
     state_=*m; state_at_=steadySeconds(); state_seen_=true;
     if (!preview_ && !guard_.ready() && state_.armed) guard_.fault("cannot initialize reference while armed");
@@ -219,7 +229,7 @@ class FullOdometryBridge {
   ros::Publisher output_,health_,status_;
   ros::Subscriber input_sub_,state_sub_;
   mavros_msgs::State state_;
-  double state_at_{0},last_config_check_{0};
+  double state_at_{0},last_config_check_{0},state_timeout_{3.0};
   std::string input_,parent_,child_,mapping_ns_,last_status_;
 };
 }  // namespace lio_to_mavros

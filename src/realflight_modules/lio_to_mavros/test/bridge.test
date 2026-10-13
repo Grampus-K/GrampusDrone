@@ -41,5 +41,14 @@
     <param name="full/output_topic" value="/test/armed_output" />
     <remap from="/mavros/state" to="/test/armed_state" />
   </node>
+  <!-- Independent formal instance tests silent state loss while odometry continues. -->
+  <node pkg="lio_to_mavros" type="lio_to_mavros_node" name="stale_state" required="true">
+    <rosparam command="load" file="$(find lio_to_mavros)/config/full_odometry.yaml" />
+    <param name="output_mode" value="odometry" />
+    <param name="full/stable_seconds" value="0.2" />
+    <param name="full/input_topic" value="/test/formal_input" />
+    <param name="full/output_topic" value="/test/stale_output" />
+    <remap from="/mavros/state" to="/test/stale_state" />
+  </node>
   <test pkg="lio_to_mavros" type="test_bridge.py" test-name="bridge_integration" name="bridge_integration" time-limit="90" />
 </launch>
