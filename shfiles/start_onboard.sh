@@ -10,6 +10,7 @@ LIO_OUTPUT_MODE="${LIO_OUTPUT_MODE:-vision_pose}"
 LIO_ODOMETRY_PREVIEW="${LIO_ODOMETRY_PREVIEW:-false}"
 LIO_FULL_CONFIG="${LIO_FULL_CONFIG:-${WORKSPACE}/src/realflight_modules/lio_to_mavros/config/full_odometry.yaml}"
 
+# Startup gate only: later network loss must not stop localization.
 python3 "${WORKSPACE}/shfiles/wait_for_stable_clock.py"
 
 source /opt/ros/noetic/setup.bash
