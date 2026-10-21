@@ -159,7 +159,28 @@ python3 shfiles/check_lio_bridge_odometry.py \
 
 ### 3.4 建立本次记录目录及 ROS 记录
 
-每个子项开始前，在用于记录的 Ubuntu 终端执行；`RUN_DIR` 是该终端变量，换终端须重新指定实际路径：
+推荐使用仓库里的自动化脚本，避免漏掉参数、服务状态或收尾文件。它会创建与原手册相同的记录目录，采集提交版本、RTC、systemd、ROS 参数和磁盘状态，然后在前台启动 rosbag。测试结束时在同一个终端按 `Ctrl-C`，脚本会停止 rosbag、保存 journal、服务重启计数和 `rosbag info`：
+
+```bash
+cd ~/GrampusDrone
+source /opt/ros/noetic/setup.bash
+source /home/orin/livox_ws/devel/setup.bash
+source ~/GrampusDrone/devel/setup.bash
+python3 shfiles/localization_test.py record --test-id 001C_ev_hover
+```
+
+断热点测试必须在 Orin 本地终端运行；不要把记录进程依赖在会断开的 SSH 会话上。脚本默认会用 `sudo -v` 请求一次权限，以便读取 RTC、systemd 和 journal；若现场不允许 sudo，可加 `--no-sudo`，但对应文件会缺失，自动检查会标记为 `SKIP`。也可以用 `--duration 120` 做固定时长地面记录。
+
+记录结束后，对脚本打印出的目录执行：
+
+```bash
+python3 shfiles/localization_test.py analyze \
+  "$HOME/flight_test_logs/实际时间_001C_ev_hover"
+```
+
+分析会检查：输入和正式输出是否存在、频率是否在 9–11 Hz、最大间隔是否不超过 0.5 s、时间戳是否单调、输入输出时间戳匹配率、数值有限性、桥接器和系统时钟健康、MAVROS 连接状态，以及记录期间 systemd 是否重启。结果同时保存为 `analysis.json`，终端只打印 PASS/FAIL 和关键范围。自动 PASS 只说明记录链路与数据完整性通过；悬停是否稳定、是否发生位置/yaw 跳变、PX4 是否实际融合以及飞手是否安全接管，仍必须结合现场记录、QGC 和 ULog 判定。
+
+如果脚本不可用，下面的手动流程仍可作为后备；`RUN_DIR` 是该终端变量，换终端须重新指定实际路径：
 
 ```bash
 TEST_ID=001A_online_ground  # 每个子项改名，例如 001C_ev_hover
