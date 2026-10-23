@@ -2,7 +2,7 @@
 
 适用本工程的 Ubuntu 20.04 arm64 / ROS Noetic / JetPack r35.6 环境，记录 D455 驱动安装与排查步骤。前提：已按 [OpenCV 修复说明](openvins_jetson_opencv.md) 编译 `~/grampus_cv_bridge_ws`，OpenVINS 已编译通过且链接 OpenCV 4.5。
 
-**2026-10-23 实测更新：SDK 2.55.1 + RSUSB + 固件 5.16.0.1 的独立测试也失败，且核实 2.55.1 缺少后续的 RSUSB IMU 格式修复。当前处理入口是 [第 6.4 节](#64-独立-sdk-已复现先验证包含-rsusb-修复的版本)。第 2–5 节保留为此前的安装记录，不再作为此组合的可用性推荐；不要重复重装 2.55.1 或先重编 ROS。首次安装者先准备第 1 节依赖，再做第 6.4 节独立测试。**
+**2026-10-23 实测更新：SDK 2.56.3 + RSUSB + 固件 5.16.0.1 已在本机通过十秒独立双目/IMU 采流，见 [第 6.5 节](#65-sdk-2563-四路采流通过切换-ros-驱动)。此前 2.55.1 测试失败，且缺少后续 RSUSB IMU 格式修复。第 2–5 节保留为历史安装记录，不要重复安装 2.55.1。首次安装者先准备第 1 节依赖，再按第 6.4 节安装、验证 2.56.3，通过后继续第 6.5 节。ROS 采流和 IMU 标定警告仍待验证。**
 
 **固件兼容性修正：本机 D455 固件为 05.16.00.01，不能继续使用此前文档的 SDK 2.50.0。** 官方 SDK 2.55.1 发布说明指出，固件 5.16.0.1 将 gyro/accel 数据改为 32 位，旧 SDK 会错误解析 IMU。枚举成功不代表采流或 IMU 正确。
 
@@ -347,7 +347,90 @@ GRAMPUS_RS_SDK_PREFIX=/opt/grampus/librealsense-2.56.3 \
 - 四路有帧且退出码 0：再处理 IMU 标定警告、频率/时间戳检查，以及 ROS1 驱动与新 SDK 的源码兼容和重编；旧 ROS 节点不会因安装了新目录而自动换版本。
 - 仍在 Stereo open 失败：不能宣称上述修复已解决本机；保留同接口对照结果，继续隔离独立 IMU 和设备/USB 后端，必要时跨主机比较，不重复改 OpenVINS 参数。
 
-该版本选择已核对固定标签源码与发布说明；编写端没有执行这套 SDK 的 Jetson 构建或硬件采流测试。
+该版本选择已核对固定标签源码与发布说明；编写端没有执行这套 SDK 的 Jetson 构建或硬件采流测试。用户随后提供的 Orin 测试结果见下一节。
+
+### 6.5 SDK 2.56.3 四路采流通过：切换 ROS 驱动
+
+本机 `all_1xdDHbd0/report.log` 已确认头文件为 2.56.3、运行时为 25603，实际加载 `/opt/grampus/librealsense-2.56.3/lib/librealsense2.so.2.56`。同一台 D455（341522300469，固件 5.16.0.1）在 Motion、Stereo 的 open/start 全部完成后收到四路数据，并正常 stop/close：
+
+```text
+COUNTS second=10 gyro=4014 accel=1018 infra1=294 infra2=294
+RESULT RECEIVED_ALL_REQUESTED_STREAMS
+PROBE_EXIT_CODE=0
+```
+
+稳定阶段每秒增量约为 gyro 400、accel 100、左右图像各 30。图像总数包含启动等待，不用总数除以十判断稳定帧率。启动初期仍有少量 `control_transfer` 警告，但本次没有阻止采流；这不能证明后续所有 USB 警告都无害。头文件编译 warnings 没有使测试失败。本次结果证明十秒四路采流通过，尚未验证长期稳定性、时间戳同步、IMU 数值精度或 VIO。
+
+**`IMU Calibration is not available, default intrinsic and extrinsic will be used` 仍存在。** 可以继续接通 ROS 并检查原始数据；暂不运行工厂参数导出脚本，不将 SDK 默认内外参当成这台相机的出厂标定。后续需检查该警告来源，并完成相机与 IMU 联合标定。
+
+现有 ROS1 驱动仍需从此前的 2.55.1 改为链接 2.56.3；仅安装新 SDK 不会重编 ROS。已核对 2.3.2 的最低 SDK 版本检查，以及其使用的旧 tracking / wheel-odometer 接口在 2.56.3 头文件中仍存在；这只是部分源码兼容检查，本机实际构建和运行仍以下列输出为准，不宣称该组合已经获得上游完整验证。
+
+先正常关闭相机 launch / Viewer，保持整机服务停止。无需重装 SDK，也无需修改 `.bashrc`。打开终端进入干净 Bash，避免其自动 source 的主工程反过来成为依赖工作空间的 underlay：
+
+```bash
+env -i HOME="$HOME" USER="$USER" \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  TERM="${TERM:-xterm}" LANG=C.UTF-8 bash --noprofile --norc
+```
+
+在这个 Bash 中执行：
+
+```bash
+source /opt/ros/noetic/setup.bash
+source ~/livox_ws/devel/setup.bash
+git -C ~/grampus_cv_bridge_ws/src/realsense-ros status --short
+git -C ~/grampus_cv_bridge_ws/src/realsense-ros describe --tags --exact-match
+```
+
+应无源码修改，标签应为 `2.3.2`。然后只重编已有依赖工作空间，显式指定新 SDK 和既有 OpenCV 4.5 路径；无需删除 build/devel 或重编 OpenVINS：
+
+```bash
+cd ~/grampus_cv_bridge_ws
+catkin_make -j2 --force-cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+  -DCATKIN_ENABLE_TESTING=OFF \
+  -DOpenCV_DIR=/usr/lib/aarch64-linux-gnu/cmake/opencv4 \
+  -Drealsense2_DIR=/opt/grampus/librealsense-2.56.3/lib/cmake/realsense2 \
+  -DCMAKE_BUILD_RPATH=/opt/grampus/librealsense-2.56.3/lib \
+  -DCMAKE_INSTALL_RPATH=/opt/grampus/librealsense-2.56.3/lib
+```
+
+构建失败先保留完整输出，不继续启动。成功后在同一 Bash 验证：
+
+```bash
+source ~/grampus_cv_bridge_ws/devel/setup.bash
+source ~/GrampusDrone/devel/setup.bash
+rospack find realsense2_camera
+rospack find cv_bridge
+rospack find openvins_bridge
+ldd ~/grampus_cv_bridge_ws/devel/lib/librealsense2_camera.so \
+  | grep -E 'realsense|opencv|cv_bridge|not found'
+```
+
+相机驱动和 cv_bridge 应指向 `grampus_cv_bridge_ws`，openvins_bridge 应指向 `GrampusDrone`。librealsense 必须来自 `/opt/grampus/librealsense-2.56.3/lib`；cv_bridge 来自 overlay，OpenCV 为 4.5，不能出现 4.2 或 `not found`。不要用软链接替换版本不同的库。
+
+退出干净 Bash，在正常桌面新终端启动（沿用第 5 节的四行 source 顺序）：
+
+```bash
+roslaunch openvins_bridge d455.launch 2>&1 | tee ~/d455_sdk2563_ros_test.log
+```
+
+日志应同时显示 `Built with LibRealSense v2.56.3` 和 `Running with LibRealSense v2.56.3`。另开正常终端，先验证原始流，再验证检查节点转发：
+
+```bash
+timeout 10s rostopic hz /d455/infra1/image_rect_raw
+timeout 10s rostopic hz /d455/infra2/image_rect_raw
+timeout 10s rostopic hz /d455/imu
+timeout 10s rostopic hz /vio_inputs/left/image_raw
+timeout 10s rostopic hz /vio_inputs/right/image_raw
+timeout 10s rostopic hz /vio_inputs/imu
+timeout 5s rostopic echo -n 1 /d455_input/ready
+```
+
+两路图像应约 30 Hz；合并 IMU 按 gyro 时间戳输出，预期接近 400 Hz，不能用 accel 的 100 Hz 作为其预期输出频率。`ready` 必须查看值，10 Hz 发布频率不代表值为 true。rqt 选 raw 图像传输。
+
+如果原始三路有数据而转发没有，依据本次日志检查 emitter 确认、时间戳和左右配对；不要直接绕过 camera_guard。如果 ROS 初始化仍失败，提供 `~/d455_sdk2563_ros_test.log` 完整内容及 ldd 输出。即使 ready=true，也只表示采流检查通过，不表示 IMU 标定警告或定位精度问题已经解决。
 
 ## 依据与验证边界
 
