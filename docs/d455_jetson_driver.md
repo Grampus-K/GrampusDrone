@@ -503,6 +503,32 @@ roslaunch openvins_bridge d455.launch \
 
 运行约 30 秒后 Ctrl-C，提供完整 `~/d455_calibration_cause.log`。预期原警告现在会追加 `Cause: ...`，据此区分读取通信/设备响应等问题；如果仍只有旧警告，先检查加载的 SDK 路径及构建安装结果。暂不执行工厂标定导出或 PX4 融合。
 
+### 6.8 读取结果为 -21：先区分无可返回标定数据与主机相关问题
+
+本机执行 6.7 后，启动输出确认已加载增强日志的 SDK 2.56.3：
+
+```text
+IMU Calibration is not available, default intrinsic and extrinsic will be used.
+Cause: hwmon command 0x4f( 0 208 0 0 ) failed (response -21= No data to return)
+```
+
+已核对 `get_imu_eeprom_raw()`：0x4f 是 MMER 读取命令，此次请求从偏移 0 读取 208 字节。`hw-monitor.cpp` 将设备返回的错误响应转换为上述异常。这次已取得明确的设备失败响应，不是日志中另一类 `control_transfer ... number: 11` 的同义表达，也不是 ROS 话题名或 OpenVINS 配置错误。
+
+它说明这次读取没有取得 IMU 标定表，不能进一步断言 EEPROM 损坏、原有标定被删除或 IMU 物理损坏；缺少可读标定表以及设备/固件状态等情况仍需区分。SDK 默认 IMU 内参是单位比例因子、零偏置，CAD 外参是按具体型号机械设计提供的外参。**CAD 外参本身是 SDK 支持的设计值，不能单凭这一项认定设备异常；它也不是该台相机实测的联合标定。** IMU 内参标定、相机与 IMU 的时空联合标定、IMU 噪声评估是不同工作，Kalibr 联合标定不会自动修复 EEPROM 读取。
+
+本次附件仍显示 `RealSense Node Is Up!`，也再次出现一次 `Motion Module failure`，并在启动约 7 秒后还有一条 USB 控制传输警告。附件没有帧计数或话题频率，因此不能直接沿用前次 DEBUG 的连续采流结论作为本次测试结果。仅改了日志，尚未修复设备返回码。
+
+建议下一步做一次跨主机对照，避免继续在已经能采流的 Orin 上反复换库：
+
+1. 关闭 Orin 上的相机进程，把同一台相机完全断开电源约 10 秒。
+2. 在 Windows 下载并运行 [官方 v2.56.3 独立 Viewer](https://github.com/realsenseai/librealsense/releases/download/v2.56.3/Intel.RealSense.Viewer.beta.exe)，沿用当前固件。关闭其他占用相机的软件，直接连接 USB3 接口。
+3. 确认序列号 `341522300469`、固件 `5.16.0.1`、USB3。先只开启 Motion Module 的 gyro / accel（若可选，设 400 / 100 Hz），不要同时开启 RGB / Depth。静放约 30 秒，再缓慢改变姿态，查看两路是否连续变化，记录所有标定与 Motion Module 通知。
+4. 提供 Viewer 的日志和版本、设备信息；若出现标定警告，保留原文。同版本官方 Viewer 没有本工程的日志补丁，不要求它也出现 `Cause:`。
+
+Windows 同样失败会使设备/固件状态或标定数据问题更值得检查，但两边同用 2.56.3，仍不能排除共有的 SDK 问题；只有 Orin 失败则优先检查其后端、USB 与初始化路径。若要进一步比较线材，作为第二次对照更换已知可靠的 USB3 线，记录变化。跨主机对照不是精度验收，也不能仅因一端有图形读数就宣布硬件通知已解决。
+
+这一步只观察和采流，不进行固件刷写、恢复出厂或 EEPROM 标定写入。若最终确认只有缺少 IMU 校正数据且采样可靠，可继续制定离线 IMU 内参、噪声和相机/IMU 联合标定方案，无需把“消除警告”作为定位方案的唯一目标；不得把当前默认参数标注成该台设备的实测工厂标定。当前暂不执行工厂参数导出与 PX4 融合，等待上述对照结果。
+
 ## 依据与验证边界
 
 - [SDK 2.55.1 官方发布说明](https://github.com/realsenseai/librealsense/wiki/Release-Notes#release-2551)：固件 5.16.0.1 的 IMU 数据格式变更及旧 SDK 不兼容。
@@ -511,5 +537,6 @@ roslaunch openvins_bridge d455.launch \
 - [SDK 构建选项](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/lrs_options.cmake) 与 [安装路径](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/install_config.cmake)。
 - [ROS 驱动动态选项注册](https://github.com/realsenseai/realsense-ros/blob/2.3.2/realsense2_camera/src/base_realsense_node.cpp) 与 [SDK USB 错误日志实现](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/libusb/messenger-libusb.cpp)。
 - [RSUSB IMU 修复 PR #12857](https://github.com/realsenseai/librealsense/pull/12857)、[2.55.1 的旧报文定义](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/hid/hid-types.h)及 [2.56.3 对照版本说明](https://github.com/realsenseai/librealsense/releases/tag/v2.56.3)。
-- [SDK 2.56.3 IMU 标定读取与异常回退](https://github.com/realsenseai/librealsense/blob/v2.56.3/src/ds/ds-calib-parsers.cpp)：6.7 的工具只为该 catch 分支添加异常内容日志；已在编写端验证原文匹配、重复执行、备份和拒绝非预期源码，尚未在 Orin 编译执行该修改。
+- [SDK 2.56.3 IMU 标定读取与异常回退](https://github.com/realsenseai/librealsense/blob/v2.56.3/src/ds/ds-calib-parsers.cpp)：6.7 的工具只为该 catch 分支添加异常内容日志；已在编写端验证原文匹配、重复执行、备份和拒绝非预期源码。Orin 后续验证结果见 6.8。
+- [SDK 2.56.3 硬件命令响应处理](https://github.com/realsenseai/librealsense/blob/v2.56.3/src/hw-monitor.cpp)：6.8 的设备返回码依据；用户提供的新日志已确认 6.7 修改在 Orin 编译加载成功。
 - 本文命令依据固定版本源码核对；编写端是 Windows，未执行 Jetson 编译、USB 连接或硬件测试。
