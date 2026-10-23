@@ -70,6 +70,8 @@ chmod +x shfiles/fetch_openvins.py src/realflight_modules/openvins_bridge/script
 
 以下命令在 Ubuntu 20.04 / ROS Noetic 的机载机执行，工程路径按实际修改。此处的 Windows 开发机未提供 ROS，不能代替机载编译与硬件验证。
 
+**Jetson 注意：如果 `pkg-config --modversion opencv4` 是 NVIDIA 的 4.5.4，且系统 cv_bridge 链接 OpenCV 4.2，请先执行 [Jetson OpenCV 依赖修复](openvins_jetson_opencv.md)，用其中命令替代本节。** 该方案保留 NVIDIA OpenCV、在独立 overlay 重编译 cv_bridge，并用 `-DENABLE_ARUCO_TAGS=OFF` 关闭本次不需要的标记跟踪功能。下面这套 apt 命令仅适用于 OpenCV 开发包和 cv_bridge 使用一致的 Ubuntu 系统库的环境。
+
 ```bash
 cd ~/GrampusDrone
 source /opt/ros/noetic/setup.bash
