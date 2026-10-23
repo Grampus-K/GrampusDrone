@@ -33,12 +33,14 @@ class CameraGuard:
         self.sync=message_filters.ApproximateTimeSynchronizer(self.subs,10,.002)
         self.sync.registerCallback(self.images)
         self.imu_sub=rospy.Subscriber('/d455/imu',Imu,self.on_imu,queue_size=100,tcp_nodelay=True)
+        rospy.loginfo('D455 input: waiting for /d455/stereo_module; confirming emitter off')
         self.client=Client('/d455/stereo_module',timeout=30,config_callback=self.configuration)
         config=self.client.update_configuration({'emitter_enabled':0})
         if config.get('emitter_enabled')!=0:
             raise ValueError('D455 emitter-off not confirmed')
         with self.lock:
             self.enabled=config.get('emitter_enabled')==0 and not self.failed
+        rospy.loginfo('D455 input: emitter off confirmed; waiting for stereo images and IMU')
 
     def configuration(self, config):
         with self.lock:
@@ -96,6 +98,10 @@ class CameraGuard:
                 self.fail('sensor stream expired or emitter state changed')
             self.seen=self.seen or ok
             self.ready.publish(Bool(data=ok and not self.failed))
+            if not self.seen and not self.failed:
+                missing=[k for k in ('left','right','imu') if not self.fresh.recent(k,now,steady,.5)]
+                rospy.logwarn_throttle(5,'D455 input waiting: emitter_off=%s, missing/stale=%s',
+                                      self.enabled,','.join(missing))
 
 
 if __name__=='__main__':

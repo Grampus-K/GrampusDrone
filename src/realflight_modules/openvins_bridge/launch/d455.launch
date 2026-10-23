@@ -1,6 +1,9 @@
 <launch>
   <!-- ROS1 realsense-ros 2.3.2 interface. Not a ROS2 launch file. -->
   <arg name="serial_no" default=""/>
+  <!-- Confirm supported rates with rs-enumerate-devices on the actual camera. -->
+  <arg name="gyro_fps" default="400"/>
+  <arg name="accel_fps" default="100"/>
   <include file="$(find realsense2_camera)/launch/rs_camera.launch">
     <arg name="camera" value="d455"/>
     <arg name="serial_no" value="$(arg serial_no)"/>
@@ -14,8 +17,8 @@
     <arg name="enable_pointcloud" value="false"/>
     <arg name="enable_gyro" value="true"/>
     <arg name="enable_accel" value="true"/>
-    <arg name="gyro_fps" value="400"/>
-    <arg name="accel_fps" value="250"/>
+    <arg name="gyro_fps" value="$(arg gyro_fps)"/>
+    <arg name="accel_fps" value="$(arg accel_fps)"/>
     <arg name="unite_imu_method" value="linear_interpolation"/>
     <arg name="enable_sync" value="false"/>
     <arg name="publish_tf" value="true"/>

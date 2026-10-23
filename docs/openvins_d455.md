@@ -120,7 +120,9 @@ rostopic echo -n 1 /d455_input/ready
 rosrun rqt_image_view rqt_image_view
 ```
 
-左右图像均为 848×480、30 Hz；IMU 请求 gyro 400 Hz、accel 250 Hz，由 RealSense 按陀螺仪时刻插值组合。图像应清楚、有纹理，左右不是同一张图。`camera_guard` 确认 `emitter_enabled=0` 后才转发，避免主动红外投射图案被当作场景特征。亮度/曝光需根据实际光照检查；下视时注意机体、起落架遮挡。
+若显示 no new messages 或 ready=False，先按 [驱动说明第 6 节](d455_jetson_driver.md#6-launch-启动但无图像imu) 检查 `/d455/infra1/image_rect_raw`、`/d455/infra2/image_rect_raw`、`/d455/imu` 原始流。rqt 中也先选原始图像话题。仅 launch 未退出不表示相机采流成功。固件 5.16.0.1 不可搭配旧 SDK 2.50.0，升级与重编步骤见同一文档；仍提示 IMU 工厂标定无法读取时，先不要导出参数。
+
+左右图像均为 848×480、30 Hz；IMU 默认请求 gyro 400 Hz、accel 100 Hz，由 RealSense 按陀螺仪时刻插值组合。以本机 SDK 枚举支持档位和实际输出为准；可以用 `gyro_fps:=... accel_fps:=...` 调整（d455/preview/px4_ground 均支持），后续标定与运行保持一致。此前固定 250 Hz 在本机不支持，驱动会回退到 100 Hz；修改采样参数不能解决固件/SDK 的格式不兼容。图像应清楚、有纹理，左右不是同一张图。`camera_guard` 确认 `emitter_enabled=0` 后才转发，避免主动红外投射图案被当作场景特征。亮度/曝光需根据实际光照检查；下视时注意机体、起落架遮挡。
 
 ```bash
 cd ~/GrampusDrone
