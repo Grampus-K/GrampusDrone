@@ -96,7 +96,7 @@ catkin_test_results
 
 ## 4. 预览时加载环境
 
-每个新终端依次加载：
+每个新终端依次加载；若写入 `.bashrc`，调整原有四行的顺序，不要重复追加。主工程 GrampusDrone 必须最后加载，否则后面的 cv_bridge setup 会恢复其 underlay，使主工程的包无法被发现：
 
 ```bash
 source /opt/ros/noetic/setup.bash
@@ -106,7 +106,7 @@ source ~/GrampusDrone/devel/setup.bash
 rospack find cv_bridge
 ```
 
-验证后回到 [主操作说明第 2 节](openvins_d455.md#2-启动相机导出这一台-d455-的出厂参数) 启动相机。此修复解决构建依赖，相机、VIO 精度和飞控融合仍需后续验证。
+再执行 `rospack find realsense2_camera`。若找不到包，先检查是否在其他工作空间安装；SDK 和 ROS 驱动都没有安装时，按 [Jetson D455 驱动安装](d455_jetson_driver.md) 补齐。验证后回到 [主操作说明第 2 节](openvins_d455.md#2-启动相机导出这一台-d455-的出厂参数) 启动相机。此修复解决构建依赖，相机、VIO 精度和飞控融合仍需后续验证。
 
 ## 回退说明
 

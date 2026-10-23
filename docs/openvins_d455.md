@@ -99,7 +99,11 @@ catkin_test_results
 
 ## 2. 启动相机，导出这一台 D455 的出厂参数
 
-每个新终端先 `source ~/GrampusDrone/devel/setup.bash`。建议在地面停止已有整机服务进行独立测试：
+先确认 `rospack find realsense2_camera` 和 `rosversion realsense2_camera` 成功。若报 `Resource not found: realsense2_camera`，且未安装 SDK/驱动，先执行 [Jetson D455 驱动安装](d455_jetson_driver.md)，再回到本节；OpenVINS 编译和桥接测试通过不代表相机驱动已就绪。
+
+Jetson 已按专用 OpenCV 说明构建 overlay 时，`.bashrc` 中的已有 source 行应依次为 ROS → livox_ws → grampus_cv_bridge_ws → GrampusDrone，主工程必须最后加载。不要在主工程后再次 source cv_bridge 工作空间。当前终端不确定时手动按此顺序加载；正常新终端使用 `.bashrc` 即可。其他环境每个新终端先 `source ~/GrampusDrone/devel/setup.bash`。
+
+建议在地面停止已有整机服务进行独立测试。若提示 unit changed on disk，先执行 `sudo systemctl daemon-reload`，再 stop，并用 `systemctl status grampusdrone.service --no-pager -l` 确认 `inactive (dead)`：
 
 ```bash
 sudo systemctl stop grampusdrone.service
