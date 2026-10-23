@@ -176,10 +176,12 @@ rosservice list | grep -E '/d455/.*set_parameters'
 ```
 
 - 原始双目和 IMU 都无数据：先处理 SDK/固件兼容、驱动初始化或 USB 传输，不调整 OpenVINS 配置。
-- 原始双目有数据、合并 IMU 无数据：分别查看 `/d455/gyro/sample` 与 `/d455/accel/sample`，检查受支持档位、固件/SDK 和 IMU 合并；100 Hz accel 不是合并 IMU 的输出频率。
+- 原始双目有数据、合并 IMU 无数据：检查受支持档位、固件/SDK 和 IMU 合并。2.3.2 驱动启用合并时不发布独立的 `/d455/gyro/sample` 与 `/d455/accel/sample`；需要先停止相机，再以 `unite_imu_method:=""` 启动驱动，才能用这两个话题测试。100 Hz accel 不是合并 IMU 的输出频率。
 - 三路原始流都有数据但 `/vio_inputs/*` 无数据：检查 d455_input 日志中的 emitter 确认、时间戳、左右配对或锁存故障。`ready=False` 表示检查未通过，并不直接说明相机离线。不要绕过检查强制改为 true。
 
 rqt 中可选择原始 `/d455/infra1/image_rect_raw`、`/d455/infra2/image_rect_raw` 查看驱动是否出图；预览检查通过后再选择 `/vio_inputs/left/image_raw` 等转发话题。
+
+这些红外图像是 mono8，rqt 选择 raw 传输即可；`compressedDepth` 用于深度图像，订阅红外图像的 `/compressedDepth` 会触发格式错误。这种订阅错误与启用 IMU 后原始流无数据是两个不同问题。
 
 更新 SDK 后，启动日志必须同时显示 **Built with / Running with LibRealSense v2.55.1**。若仍是 2.50.0，先核对上面的 CMake 路径和 ldd，不能仅依据 pkg-config 的版本判断 ROS 驱动已更新。
 
@@ -241,6 +243,43 @@ sudo dmesg --ctime | tail -n 80
 ```
 
 避免 SDK 设备工具、RealSense Viewer 和多个 ROS 相机驱动同时访问同一台相机；rqt_image_view 订阅 ROS 图像可以与相机 launch 一起运行。正常定位入口仍是 `d455.launch`，切回前先停止纯双目测试。
+
+### 6.3 纯双目正常，但启用 IMU 后所有流停止
+
+本机后续实测：纯双目两路约 30 Hz；直接启动 realsense2_camera（不含 camera_guard/OpenVINS），同时启用 gyro/accel 后原始双目和 IMU 都无消息，关闭 IMU 合并也没有恢复。旧日志持续出现 `get_xu(ctrl=1)`、`get_xu(id=7)` 读取失败。因此不能继续把问题归到 `/vio_inputs` 转发或仅仅归到 IMU 插值；应先检查 ROS 之外能否采流。也不能据此认定物理 IMU 已损坏。
+
+工程提供独立 SDK 诊断源码与脚本，直接链接已经安装的 `/opt/grampus/librealsense-2.55.1`。不需要重新构建 SDK、catkin 或安装 Python RealSense 绑定。脚本只构建一个小程序，记录设备、USB 拓扑、实际链接库、每个传感器 open/start 的前后位置和 10 秒内累计帧数。它不写相机选项、出厂标定、固件或系统配置；打开传感器会临时开始采流。整个采流进程最长 45 秒，必要时再给 5 秒强制结束，防止初始化或退出卡住。
+
+先 Ctrl-C 关闭所有相机 launch 和设备工具，保持整机服务停止。完全拔下 D455 约 10 秒后接回，沿用纯双目测试成功的 USB 线和接口，避免一次改变多个变量。然后执行：
+
+```bash
+cd ~/GrampusDrone
+git pull --ff-only origin master
+bash src/realflight_modules/openvins_bridge/diagnostics/run_d455_sdk_probe.sh all 341522300469
+```
+
+上述序列号属于当前这台 D455，换相机时使用实际序列号；只连接一台 RealSense 时也可省略。命令运行时不要启动相机 ROS 节点或 Viewer。`.bashrc` 的 ROS source 顺序不影响该独立诊断，脚本仅在诊断子进程中清除 LD_LIBRARY_PATH/LD_PRELOAD，以使用指定 SDK。
+
+`all` 请求与本次 ROS 测试相同的 gyro 400 Hz、accel 100 Hz、双目 848×480@30 Y8，按模块名排序启动（Motion Module 在 Stereo Module 前，与 ROS 2.3.2 一致）。不支持某档位时明确报错，不能静默回退。若 Motion Module 的 open/start 卡住，程序可能还未开始启动双目，因此四路都无数据不能推出四个传感器都坏了。
+
+| 报告内容 | 可以得出的结论 / 下一步 |
+| --- | --- |
+| 最后一条 STAGE 是 Motion Module 的 `open begin` 或 `start begin`，随后超时 | 独立 SDK 也卡在运动传感器初始化；优先查 SDK/RSUSB、USB 访问和设备固件交互，不修改 OpenVINS。 |
+| open/start 都完成，但某些 COUNTS 始终为 0 | 独立 SDK 已启动接口但没收到对应帧；保留具体流和 SDK 错误，继续查采流链路。 |
+| `RECEIVED_ALL_REQUESTED_STREAMS` 且退出码 0 | 这一次独立 SDK 四路均收到帧；接下来比较 ROS 驱动设置和启动流程。仅证明有帧，不证明帧率、时间戳、同步和标定合格。 |
+| Missing exact profile / SDK headers and runtime differ / 编译失败 | 测试尚未进入有效采流阶段；先处理报告中明确的档位、版本或构建错误。 |
+
+完整报告保存在终端打印的 `~/grampus_vio_deps/d455_diagnostics/all_XXXXXXXX/report.log`，请提供整个文件，不再只截最后 100 行。`PROBE_EXIT_CODE=124` 表示超时；137 表示被 SIGKILL 结束，需结合最后阶段判断。工具也支持 `imu` 和 `ir` 模式，供后续有针对性地隔离测试；某次卡住后先关闭进程、拔插恢复设备，不自动连续运行多组测试。
+
+若需要补充此前 ROS 的初始化过程，应查看新运行自己的日志开头：
+
+```bash
+sed -n '1,220p' ~/d455_unmerged_imu_test.log
+```
+
+`d455_stereo_imu_test.log` 是之前合并模式的日志，不能替代 `d455_unmerged_imu_test.log`。反复出现的 `time_diff_keeper` 表示读取设备时钟失败，不足以证明主机系统时间错误；暂不以关闭时间同步选项、关闭错误轮询或降级固件来掩盖通信失败。
+
+该诊断工具在编写端未连接 D455，需以上述 Orin 实测报告判断结果；不能把脚本或源码检查通过当作硬件采流已修复。
 
 ## 依据与验证边界
 
