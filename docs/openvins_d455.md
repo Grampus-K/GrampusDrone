@@ -11,6 +11,49 @@ D455 左右红外 + 内置 IMU
 GNSS → PX4 EKF2 ← 外部视觉；px4ctrl 继续读取 /mavros/local_position/odom
 ```
 
+## 当前继续入口（2026-10-23：采流已通过，开始标定准备）
+
+**这台设备从本节继续，不重做第 1 节依赖安装或驱动文档的 SDK 重编。** 后续主线是本文第 4 节的标定，再到第 3 节预览，最后第 5 节 PX4 地面联调。
+
+已完成：Orin 上双目约 30 Hz、组合 IMU 约 400 Hz，`/d455_input/ready=True`；Windows 同版本 Viewer 也能采样，用户观察到静止角速度接近零、加速度模长约 9.77 m/s²，转动时响应正常。这通过了基本功能检查，不是精度、长期连续性或同步验收。Windows 也复现 IMU 默认内参/CAD 外参提示，说明此提示不是 ROS 独有的问题，尚未排除共有 SDK 或设备/固件因素。
+
+当前保留 SDK 2.56.3、ROS 驱动 2.3.2、固件 5.16.0.1 和现有采样设置。先不用第 2 节的 `export_factory_calibration.py`：当前 TF 可能来自 CAD 回退，现有导出脚本的“factory”来源描述不足以表达这一情况。缺少可读标定表不必成为离线标定的阻碍，但不能把默认值记录为本机实测出厂标定。详细驱动排查记录到此告一段落；若之后出现持续 Motion Module 通知、断流或异常数值，再保留对应日志排查。
+
+### 现在先做：录一份短的六姿态 IMU 数据
+
+这用于检查各轴偏置和尺度是否有明显异常，**不是完整内参标定，也不写 EEPROM**。先关闭 Windows Viewer，把相机接回 Orin；保持整机服务停止，在地面单独采集。
+
+终端 A（沿用 `.bashrc` 中已经配置好的环境，不新增 source 行）：
+
+```bash
+sudo systemctl stop grampusdrone.service
+source ~/GrampusDrone/devel/setup.bash
+roslaunch openvins_bridge d455.launch 2>&1 | tee ~/d455_six_pose_camera.log
+```
+
+终端 B：先确认 `ready` 为 True，再录 4 分钟 CSV。录制期间该命令没有持续终端输出属于正常现象：
+
+```bash
+source ~/GrampusDrone/devel/setup.bash
+timeout 5s rostopic echo -n 1 /d455_input/ready
+mkdir -p ~/grampus_vio_data
+D455_POSE_CSV="$HOME/grampus_vio_data/imu_six_pose_$(date +%Y%m%d_%H%M%S).csv"
+timeout --signal=INT 240s rostopic echo -p /vio_inputs/imu > "$D455_POSE_CSV"
+wc -l "$D455_POSE_CSV"
+ls -lh "$D455_POSE_CSV"
+```
+
+录制开始后，用稳定支撑让相机依次处于六种大致相反的静止朝向，使重力分别接近 IMU 三个轴的正、负方向。每种朝向放稳约 20 秒，中间缓慢翻转，避免碰撞镜头、挤压接口或牵拉 USB 线。不要求初检时精确知道各轴对应哪个机壳面；无法安全放置时用支架，不强行立放。结束后提供该 CSV 和 `~/d455_six_pose_camera.log`，先检查静止段均值、模长及变化情况；样本行数只用于确认文件不是空的，不代替时间戳检查。
+
+`timeout` 到时退出是预期行为，不代表采集失败。若 `ready=False`、CSV 为空或只有表头，先检查本次原始流和 launch 日志，不能用 Windows 数值检查代替本次 Orin 采集。
+
+### 随后按这个顺序推进
+
+1. 根据六姿态初检决定是否需要进一步 IMU 内参校正；粗略静置不能测全轴间误差，不直接生成或写入内参。
+2. 本机用户目前没有标定板，先准备 Kalibr 兼容的 AprilGrid。可参考 [Kalibr 标定板说明](https://github.com/ethz-asl/kalibr/wiki/calibration-targets)，选择适合近距离双目同时观察的尺寸，优先 A2 大小的平整硬质哑光板。购买时确认是 Kalibr 可用的 AprilGrid，保留原始 PDF/生成参数，包括 tag 家族、ID 排列、行列数、单个 tag 尺寸和间隔，不能只凭“AprilTag 标定板”商品名称判断兼容。自行打印须关闭适应页面缩放，贴到平板上并实测尺寸；target YAML 里的 `tagSize` 用米，`tagSpacing` 是间隔与 tag 边长之比，不是米。没有板也能先完成上述 IMU 初检；不要用手机屏幕临时代替实物做最终标定。
+3. 在最终确定的 IMU 数据流上采集长时间静态数据并估计噪声，按第 4 节进行双目标定、相机/IMU 联合标定和结果导入。`--imu-models calibrated` 假设输入已校正，不会自动解决尺度/轴间误差；如需要校正数据流，还需先实现并验证运行时一致的校正方式。
+4. 使用导入的配置执行第 3 节地面预览；通过后再进入第 5 节。当前先不启动 PX4 外部视觉桥接。
+
 ## 0. 从 Windows 同步到 Ubuntu
 
 GitHub 仓库为 `https://github.com/Grampus-K/GrampusDrone.git`，本次接入代码位于 **master** 分支。在 Ubuntu 工程中先核对远端、分支和本地修改：
