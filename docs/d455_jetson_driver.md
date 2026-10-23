@@ -465,6 +465,44 @@ LRS_LOG_LEVEL=DEBUG roslaunch openvins_bridge d455.launch \
 
 暂不执行工厂标定导出或 PX4 外部视觉融合；先定位上述异常，再继续设备标定。当前采流成功应保留为进展，不再回到重复安装旧 SDK 的步骤。
 
+### 6.7 DEBUG 日志确认持续采流：打印被 SDK 隐藏的标定读取异常
+
+本机随后提供的 DEBUG 日志显示成功启动，随后约 33 秒内收到 gyro 13288 帧、accel 3359 帧、双目约 990 对。稳定阶段 SDK 时间戳间隔中位数约为 gyro 2.503 ms、accel 9.916 ms、红外 33.341 ms；已解析的各 SDK 流未见帧计数跳号或时间戳倒退。这是 SDK 采流记录，不能代替 ROS 输出的完整同步验证。附件在采集中结束，没有包含正常关闭过程。
+
+15 条 `control_transfer` 警告集中在启动初期，之后仍持续采流；`Motion Module failure` 在该附件中出现一次，也位于启动阶段。标定警告则明确包含 `IMU extrinsic table not found; using CAD values`，以及 accel / gyro 使用默认内参。当前不能判定 IMU 已损坏，也不能认定该硬件通知无害。
+
+SDK 2.56.3 在读取 IMU EEPROM 的 catch 分支丢弃了 `std::exception::what()`，所以这份 DEBUG 日志仍没有给出读取失败的原始原因。下一步只为这一个分支增加异常日志，不改变标定或采流逻辑，不重复采集同样的 DEBUG 大日志。
+
+先 Ctrl-C 关闭相机 launch / Viewer，保持整机服务停止。在正常终端执行下面整个命令块；任一步出错即停。工具仅接受已核对的 v2.56.3 原始文件或本工具已修改的文件，保留原文件备份，重复执行不会重复打补丁：
+
+```bash
+(
+  set -e
+  cd ~/GrampusDrone
+  git pull --ff-only origin master
+  python3 src/realflight_modules/openvins_bridge/diagnostics/enable_d455_calibration_error_log.py \
+    ~/grampus_vio_deps/librealsense-2.56.3
+  test -f ~/grampus_vio_deps/librealsense-2.56.3/build/CMakeCache.txt
+  grep -qx 'CMAKE_INSTALL_PREFIX:PATH=/opt/grampus/librealsense-2.56.3' \
+    ~/grampus_vio_deps/librealsense-2.56.3/build/CMakeCache.txt
+  grep -qx 'FORCE_RSUSB_BACKEND:BOOL=ON' \
+    ~/grampus_vio_deps/librealsense-2.56.3/build/CMakeCache.txt
+  cmake --build ~/grampus_vio_deps/librealsense-2.56.3/build --parallel 2
+  sudo cmake --install ~/grampus_vio_deps/librealsense-2.56.3/build
+)
+```
+
+这是对现有 SDK 的增量重编并安装到既有专用目录，沿用原构建选项。若缓存检查失败，先查看缓存，不重新配置或安装到其他位置。无需重编 ROS 工作空间；SDK 的接口和版本不变，但旧相机进程必须退出后重启才能加载修改后的库。工具备份位于 SDK 源码的 `src/ds/ds-calib-parsers.cpp.grampus-original`。这一步是诊断增强，不是修复设备标定。
+
+成功后在正常新终端运行（无需 DEBUG 环境变量）：
+
+```bash
+roslaunch openvins_bridge d455.launch \
+  2>&1 | tee ~/d455_calibration_cause.log
+```
+
+运行约 30 秒后 Ctrl-C，提供完整 `~/d455_calibration_cause.log`。预期原警告现在会追加 `Cause: ...`，据此区分读取通信/设备响应等问题；如果仍只有旧警告，先检查加载的 SDK 路径及构建安装结果。暂不执行工厂标定导出或 PX4 融合。
+
 ## 依据与验证边界
 
 - [SDK 2.55.1 官方发布说明](https://github.com/realsenseai/librealsense/wiki/Release-Notes#release-2551)：固件 5.16.0.1 的 IMU 数据格式变更及旧 SDK 不兼容。
@@ -473,4 +511,5 @@ LRS_LOG_LEVEL=DEBUG roslaunch openvins_bridge d455.launch \
 - [SDK 构建选项](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/lrs_options.cmake) 与 [安装路径](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/install_config.cmake)。
 - [ROS 驱动动态选项注册](https://github.com/realsenseai/realsense-ros/blob/2.3.2/realsense2_camera/src/base_realsense_node.cpp) 与 [SDK USB 错误日志实现](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/libusb/messenger-libusb.cpp)。
 - [RSUSB IMU 修复 PR #12857](https://github.com/realsenseai/librealsense/pull/12857)、[2.55.1 的旧报文定义](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/hid/hid-types.h)及 [2.56.3 对照版本说明](https://github.com/realsenseai/librealsense/releases/tag/v2.56.3)。
+- [SDK 2.56.3 IMU 标定读取与异常回退](https://github.com/realsenseai/librealsense/blob/v2.56.3/src/ds/ds-calib-parsers.cpp)：6.7 的工具只为该 catch 分支添加异常内容日志；已在编写端验证原文匹配、重复执行、备份和拒绝非预期源码，尚未在 Orin 编译执行该修改。
 - 本文命令依据固定版本源码核对；编写端是 Windows，未执行 Jetson 编译、USB 连接或硬件测试。
