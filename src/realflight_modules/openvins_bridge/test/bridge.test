@@ -1,0 +1,12 @@
+<launch>
+  <node pkg="openvins_bridge" type="bridge_node.py" name="test_bridge" output="screen">
+    <param name="rig_file" value="$(find openvins_bridge)/test/preview_rig.yaml"/>
+    <param name="mode" value="preview"/>
+    <param name="input_topic" value="/test/odom"/>
+    <param name="pose_topic" value="/test/pose"/>
+    <param name="camera_ready_topic" value="/test/camera_ready"/>
+    <param name="preview_topic" value="/test/preview"/>
+    <param name="stable_seconds" value="0.2"/>
+  </node>
+  <test test-name="preview_stamp_timeout" pkg="openvins_bridge" type="test_bridge_ros.py" time-limit="20"/>
+</launch>

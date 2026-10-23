@@ -1,0 +1,22 @@
+<launch>
+  <!-- Disarmed, calibrated, ground validation only. No arming or PX4 parameter writes. -->
+  <arg name="config_dir"/>
+  <arg name="start_camera" default="true"/>
+  <arg name="serial_no" default=""/>
+  <arg name="start_mavros" default="true"/>
+  <arg name="fcu_url" default="/dev/ttyACM0:57600"/>
+  <include if="$(arg start_mavros)" file="$(find mavros)/launch/px4.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+  </include>
+  <include if="$(arg start_camera)" file="$(find openvins_bridge)/launch/d455.launch">
+    <arg name="serial_no" value="$(arg serial_no)"/>
+  </include>
+  <include file="$(find openvins_bridge)/launch/openvins.launch">
+    <arg name="config_dir" value="$(arg config_dir)"/>
+  </include>
+  <node pkg="openvins_bridge" type="bridge_node.py" name="openvins_bridge" output="screen" required="true">
+    <rosparam command="load" file="$(find openvins_bridge)/config/bridge.yaml"/>
+    <param name="mode" value="ground"/>
+    <param name="rig_file" value="$(arg config_dir)/rig.yaml"/>
+  </node>
+</launch>

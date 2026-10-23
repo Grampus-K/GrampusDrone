@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>openvins_bridge</name>
+  <version>0.1.0</version>
+  <description>D455 stereo OpenVINS integration and guarded PX4 1.17 ground-test bridge.</description>
+  <maintainer email="maintainers@example.invalid">GrampusDrone maintainers</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>rospy</depend>
+  <exec_depend>rosgraph</exec_depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>mavros_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>dynamic_reconfigure</depend>
+  <depend>message_filters</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ov_msckf</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+  <test_depend>rostest</test_depend>
+  <test_depend>python3-nose</test_depend>
+  <test_depend>python3-opencv</test_depend>
+  <export/>
+</package>

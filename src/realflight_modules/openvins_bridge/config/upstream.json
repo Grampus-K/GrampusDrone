@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/rpng/open_vins.git",
+  "commit": "69488123ed9362dd44b6f28e7f4680abbff1442b",
+  "archive_sha256": "d513558fc5fba7c551c38044c6621befb9eb6a5d235f8fc5d718df9e1922f7d2",
+  "ros": "ROS1 Noetic",
+  "realsense_ros_reference": "2.3.2",
+  "px4_reference": "v1.17.0"
+}

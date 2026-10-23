@@ -1,0 +1,11 @@
+<launch>
+  <arg name="config_dir"/>
+  <node pkg="ov_msckf" type="run_subscribe_msckf" name="ov_msckf" output="screen" required="true" clear_params="true">
+    <param name="config_path" value="$(arg config_dir)/estimator_config.yaml"/>
+    <param name="max_cameras" value="2" type="int"/>
+    <param name="use_stereo" value="true" type="bool"/>
+    <param name="verbosity" value="INFO"/>
+    <param name="publish_global_to_imu_tf" value="false"/>
+    <param name="publish_calibration_tf" value="false"/>
+  </node>
+</launch>

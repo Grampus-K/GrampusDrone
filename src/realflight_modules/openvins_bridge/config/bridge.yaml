@@ -1,0 +1,25 @@
+# These are initial gates, NOT measured flight accuracy or validated limits.
+mode: preview
+input_topic: /ov_msckf/odomimu
+pose_topic: /ov_msckf/poseimu
+camera_ready_topic: /d455_input/ready
+preview_topic: /openvins_bridge/odometry_preview
+output_topic: /mavros/odometry/out
+max_age: 0.5
+future_tolerance: 0.05
+visual_timeout: 0.5
+odom_timeout: 0.5
+state_timeout: 3.0
+stable_seconds: 3.0
+stationary_speed: 0.35
+stationary_angular: 0.2
+stationary_drift: 0.25
+max_speed: 20.0
+max_angular: 12.0
+max_step: 1.0
+max_angle_step: 0.35
+max_position: 10000.0
+max_output_rate: 30.0
+# Only an explicit frozen yaw; never continuously fit to PX4 output.
+reference_yaw: 0.0
+zero_position: true

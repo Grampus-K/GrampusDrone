@@ -27,3 +27,7 @@ __pycache__/
 
 # ================= System =================
 .DS_Store
+
+# Pinned external source and per-device VIO calibration (generated locally)
+/src/third_party/open_vins/
+/src/realflight_modules/openvins_bridge/config/local/
