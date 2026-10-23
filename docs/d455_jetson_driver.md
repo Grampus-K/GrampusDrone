@@ -432,6 +432,39 @@ timeout 5s rostopic echo -n 1 /d455_input/ready
 
 如果原始三路有数据而转发没有，依据本次日志检查 emitter 确认、时间戳和左右配对；不要直接绕过 camera_guard。如果 ROS 初始化仍失败，提供 `~/d455_sdk2563_ros_test.log` 完整内容及 ldd 输出。即使 ready=true，也只表示采流检查通过，不表示 IMU 标定警告或定位精度问题已经解决。
 
+### 6.6 ROS 采流与转发已通过，但仍有 Motion Module 通知
+
+本机后续 `d455_sdk2563_ros_test.log` 已显示 Built / Running with LibRealSense v2.56.3、四路档位正确、`RealSense Node Is Up!`。用户另一个终端测得原始双目各约 30 Hz、合并 IMU 约 400 Hz，转发左图约 30 Hz、转发 IMU 约 400 Hz，`/d455_input/ready=True`。检查节点成对转发左右图像，因此左图有转发也说明配对回调已经通过，但仍建议独立检查右图的订阅输出。当前可以确认 ROS 采流和检查节点转发已接通，无需再次安装 SDK。
+
+本次启动日志末尾仍有以下两项，不能据 ready=True 宣称全部正常：
+
+```text
+IMU Calibration is not available, default intrinsic and extrinsic will be used.
+Hardware Notification:Motion Module failure,...,Error,Hardware Error
+```
+
+已核对 2.56.3 的 `ds-calib-parsers.cpp`：第一条警告来自读取 IMU EEPROM 数据的异常回退；该分支使用默认 IMU 内参和按设备机械设计提供的外参。它不是“尚未做 Kalibr”的提示，也不能由当前警告确定是 EEPROM 损坏还是通信/固件读取失败。第二条是设备上报的运动模块错误通知；后续收到数据并不能解释其来源，也不能直接证明 IMU 物理损坏。camera_guard 目前检查投射器状态、数据格式、有限值、时间戳、新鲜度与双目配对，不检查 SDK 标定是否回退，也不订阅硬件通知。因此 ready=True 与上述警告可以同时存在。
+
+保持当前 launch 运行，把相机放稳，先查看少量实际数值：
+
+```bash
+timeout 5s rostopic echo -n 3 /d455/imu
+timeout 10s rostopic hz /vio_inputs/right/image_raw
+```
+
+静止时角速度应接近零，加速度向量模长应接近重力加速度（约 9.81 m/s²，分量随姿态变化）。这只是初步数值检查，三条消息不足以验证噪声、比例因子或精度。`rostopic hz` 默认统计消息到达间隔；IMU 的 min≈0、max≈0.014 s 可受 USB 批量送达或插值发布影响，不能据此认定 header 时间戳乱序，也不能据平均 400 Hz 判断同步合格。日志中的 HARDWARE_CLOCK 提示应结合后续真实时间戳验证，暂不盲目更改时间设置。
+
+然后 Ctrl-C 正常关闭原相机 launch，等待退出，再启动一次详细日志采集；不要同时运行两份驱动：
+
+```bash
+LRS_LOG_LEVEL=DEBUG roslaunch openvins_bridge d455.launch \
+  2>&1 | tee ~/d455_sdk2563_debug.log
+```
+
+该环境变量是已核对的 ROS1 2.3.2 驱动日志接口，仅对此命令生效，无需修改 `.bashrc` 或重编。运行约 30 秒后 Ctrl-C，保留并提供完整 `~/d455_sdk2563_debug.log`，用于检查标定读取周边的具体错误，以及 Motion Module 通知是否复现。详细日志用于诊断，不用该次运行评估实时性能；异常若仍被 SDK 内部捕获隐藏，后续再针对读取路径做隔离。
+
+暂不执行工厂标定导出或 PX4 外部视觉融合；先定位上述异常，再继续设备标定。当前采流成功应保留为进展，不再回到重复安装旧 SDK 的步骤。
+
 ## 依据与验证边界
 
 - [SDK 2.55.1 官方发布说明](https://github.com/realsenseai/librealsense/wiki/Release-Notes#release-2551)：固件 5.16.0.1 的 IMU 数据格式变更及旧 SDK 不兼容。
