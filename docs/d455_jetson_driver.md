@@ -187,10 +187,66 @@ rqt 中可选择原始 `/d455/infra1/image_rect_raw`、`/d455/infra2/image_rect_
 
 如果新版仍提示 **IMU Calibration is not available, default intrinsic and extrinsic will be used**，暂不导出出厂标定；需要进一步检查 SDK 是否能读取该设备的工厂 IMU 参数。这个警告不等于只是“还没做 Kalibr”，不能把默认外参当成真实出厂参数。
 
+### 6.1 emitter_enabled 参数缺失导致整个 launch 退出
+
+本机 SDK 2.55.1 的后续日志出现以下因果链：
+
+```text
+rs2_get_option(... Emitter Enabled ...) get_xu(id=2) failed
+DynamicReconfigureParameterException: don't know parameter: emitter_enabled
+REQUIRED process [d455_input-4] has died!
+Initiating shutdown!
+```
+
+驱动注册动态参数时需要读取设备选项；读取失败会跳过该选项，因此服务存在但不包含 `emitter_enabled`。此前 camera_guard 未处理配置异常，而该节点是 required，导致整组 launch 被关闭。这并不是 launch 文件丢失或 Python 找不到包。
+
+camera_guard 现已捕获参数缺失、服务异常和配置未确认等启动失败，锁存故障、持续发布 `ready=False`，不转发图像或 IMU，让驱动和诊断保持运行。晚到的配置回调不能自动解除故障；修复设备通信后需重启 launch。该修正不代表 USB 问题已经解决，也不通过删除 required、伪造 ROS 参数或绕过投射器检查恢复 VIO。
+
+日志中的 `control_transfer ... error: Success, number: 0` 不代表传输成功：SDK 在 libusb 返回负值时进入错误分支，但文本取自 errno，可能仍显示 Success。需要结合前面的 get_xu 错误判断，而不能忽略它。
+
+### 6.2 使用纯双目诊断入口隔离问题
+
+先在所有相机 launch 终端 Ctrl-C，等待退出，并停止整机服务。无人机保持未解锁：
+
+```bash
+sudo systemctl stop grampusdrone.service
+systemctl is-active grampusdrone.service
+pgrep -af 'realsense2_camera|realsense-viewer|rs-enumerate-devices|d455.launch|d455_ir_test.launch'
+```
+
+服务应为 inactive；如果还有相关相机进程，先定位其启动终端并正常关闭，不直接 kill 所有 ROS/nodelet 进程。没有其他进程使用相机后，将 D455 USB 完全拔下约 10 秒再接回，优先短 USB3 数据线直连 Orin。此操作用于恢复设备通信，不能仅凭恢复后可用就断定是线材故障。
+
+更新工程后，使用独立诊断入口：
+
+```bash
+cd ~/GrampusDrone
+git pull --ff-only origin master
+roslaunch openvins_bridge d455_ir_test.launch 2>&1 | tee ~/d455_ir_test.log
+```
+
+现有 catkin devel 布局直接读取源码 launch/Python，已有 openvins_bridge 的机器无需为本次修正重编 SDK 或主工程。纯双目入口关闭 IMU，不启动 camera_guard、OpenVINS 或 PX4 桥接；不确认投射器状态，只用于排查原始图像采流，不能直接用于标定或定位。
+
+另一个正常终端检查：
+
+```bash
+timeout 10s rostopic hz /d455/infra1/image_rect_raw
+timeout 10s rostopic hz /d455/infra2/image_rect_raw
+```
+
+纯双目测试不发布 `/vio_inputs/*` 和 `/d455_input/ready`，rqt 也请选择以上原始图像话题。若双目能稳定出图，再针对 IMU/双目组合和检查节点分开测试；若纯双目也有 get_xu 错误或不出图，收集 USB 拓扑和内核日志继续检查设备、传输和驱动后端：
+
+```bash
+lsusb -t
+sudo dmesg --ctime | tail -n 80
+```
+
+避免 SDK 设备工具、RealSense Viewer 和多个 ROS 相机驱动同时访问同一台相机；rqt_image_view 订阅 ROS 图像可以与相机 launch 一起运行。正常定位入口仍是 `d455.launch`，切回前先停止纯双目测试。
+
 ## 依据与验证边界
 
 - [SDK 2.55.1 官方发布说明](https://github.com/realsenseai/librealsense/wiki/Release-Notes#release-2551)：固件 5.16.0.1 的 IMU 数据格式变更及旧 SDK 不兼容。
 - [realsense-ros 2.3.2 说明](https://github.com/realsenseai/realsense-ros/blob/2.3.2/README.md)：ROS Noetic 与原发布的 SDK 2.50.0 配套关系；[CMake](https://github.com/realsenseai/realsense-ros/blob/2.3.2/realsense2_camera/CMakeLists.txt) 对 SDK 使用最低版本要求。
 - [SDK v2.55.1 Jetson 指南](https://github.com/realsenseai/librealsense/blob/v2.55.1/doc/installation_jetson.md)：RSUSB 与原生后端的差异。
 - [SDK 构建选项](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/lrs_options.cmake) 与 [安装路径](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/install_config.cmake)。
+- [ROS 驱动动态选项注册](https://github.com/realsenseai/realsense-ros/blob/2.3.2/realsense2_camera/src/base_realsense_node.cpp) 与 [SDK USB 错误日志实现](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/libusb/messenger-libusb.cpp)。
 - 本文命令依据固定版本源码核对；编写端是 Windows，未执行 Jetson 编译、USB 连接或硬件测试。

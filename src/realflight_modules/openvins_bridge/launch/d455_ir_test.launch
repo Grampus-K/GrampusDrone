@@ -1,0 +1,22 @@
+<launch>
+  <!-- Diagnostic only: raw stereo, no IMU, guard, VIO or PX4 output.
+       This does not confirm emitter state and must not be used for calibration. -->
+  <arg name="serial_no" default=""/>
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="camera" value="d455"/>
+    <arg name="serial_no" value="$(arg serial_no)"/>
+    <arg name="enable_infra1" value="true"/>
+    <arg name="enable_infra2" value="true"/>
+    <arg name="infra_width" value="848"/>
+    <arg name="infra_height" value="480"/>
+    <arg name="infra_fps" value="30"/>
+    <arg name="enable_depth" value="false"/>
+    <arg name="enable_color" value="false"/>
+    <arg name="enable_pointcloud" value="false"/>
+    <arg name="enable_gyro" value="false"/>
+    <arg name="enable_accel" value="false"/>
+    <arg name="enable_sync" value="false"/>
+    <arg name="publish_tf" value="true"/>
+    <arg name="respawn" value="false"/>
+  </include>
+</launch>
