@@ -11,7 +11,11 @@ if [[ "$(uname -s)" != Linux ]]; then
     echo 'Run this diagnostic on the Ubuntu machine connected to the D455.' >&2
     exit 2
 fi
-prefix=/opt/grampus/librealsense-2.55.1
+prefix="${GRAMPUS_RS_SDK_PREFIX:-/opt/grampus/librealsense-2.55.1}"
+if [[ "$prefix" != /* ]]; then
+    echo 'GRAMPUS_RS_SDK_PREFIX must be an absolute SDK installation path.' >&2
+    exit 2
+fi
 source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 for tool in g++ timeout ldd tee; do
     command -v "$tool" >/dev/null || { echo "Missing command: $tool" >&2; exit 2; }
@@ -24,6 +28,7 @@ mkdir -p "$HOME/grampus_vio_deps/d455_diagnostics"
 output_dir="$(mktemp -d "$HOME/grampus_vio_deps/d455_diagnostics/${mode}_XXXXXXXX")"
 exec > >(tee "$output_dir/report.log") 2>&1
 echo "Report: $output_dir/report.log"
+echo "SDK prefix: $prefix"
 date -Is
 uname -a
 if [[ -r /etc/nv_tegra_release ]]; then head -n 1 /etc/nv_tegra_release; fi

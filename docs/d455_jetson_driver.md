@@ -1,12 +1,14 @@
 # Jetson：补装 D455 SDK 与 ROS1 驱动
 
-适用本工程的 Ubuntu 20.04 arm64 / ROS Noetic / JetPack r35.6 环境，用于首次安装或升级 D455 驱动依赖。前提：已按 [OpenCV 修复说明](openvins_jetson_opencv.md) 编译 `~/grampus_cv_bridge_ws`，OpenVINS 已编译通过且链接 OpenCV 4.5。
+适用本工程的 Ubuntu 20.04 arm64 / ROS Noetic / JetPack r35.6 环境，记录 D455 驱动安装与排查步骤。前提：已按 [OpenCV 修复说明](openvins_jetson_opencv.md) 编译 `~/grampus_cv_bridge_ws`，OpenVINS 已编译通过且链接 OpenCV 4.5。
+
+**2026-10-23 实测更新：SDK 2.55.1 + RSUSB + 固件 5.16.0.1 的独立测试也失败，且核实 2.55.1 缺少后续的 RSUSB IMU 格式修复。当前处理入口是 [第 6.4 节](#64-独立-sdk-已复现先验证包含-rsusb-修复的版本)。第 2–5 节保留为此前的安装记录，不再作为此组合的可用性推荐；不要重复重装 2.55.1 或先重编 ROS。首次安装者先准备第 1 节依赖，再做第 6.4 节独立测试。**
 
 **固件兼容性修正：本机 D455 固件为 05.16.00.01，不能继续使用此前文档的 SDK 2.50.0。** 官方 SDK 2.55.1 发布说明指出，固件 5.16.0.1 将 gyro/accel 数据改为 32 位，旧 SDK 会错误解析 IMU。枚举成功不代表采流或 IMU 正确。
 
-本步骤使用独立安装的 librealsense **v2.55.1**，保留 ROS1 realsense-ros **2.3.2** 的 launch 接口并针对新 SDK 重新编译。注意：2.3.2 上游发布时配套的是 SDK 2.50.0；这里是针对当前固件的源码重编方案，不是上游已验证的官方配套组合。本地已核对 CMake 最低版本要求及涉及的 SDK 接口，尚未执行 Jetson 编译和硬件验证。编译失败时保留第一条错误，不通过替换库软链接强行运行。
+以下历史安装步骤使用独立安装的 librealsense **v2.55.1**，保留 ROS1 realsense-ros **2.3.2** 的 launch 接口并针对新 SDK 重新编译。注意：2.3.2 上游发布时配套的是 SDK 2.50.0；这不是上游已验证的官方配套组合。用户现已在 Orin 完成编译，但双目 + IMU 采流未通过，详见第 6.4 节。编译失败时保留第一条错误，不通过替换库软链接强行运行。
 
-如果已经安装此前的 2.50.0：停止 launch 和整机服务后，从第 2 节构建到新的 2.55.1 目录，再做第 3、4 节。保留旧目录；已有且未修改的 realsense-ros 2.3.2 无需再次 clone，只需执行第 4 节的 catkin_make。无需重编 OpenVINS，也不更改相机固件。
+如果已经安装此前的 2.50.0 或 2.55.1：保留旧目录，停止 launch 和整机服务后，先做第 6.4 节的隔离验证。不要在独立采流通过前按第 4 节切换 ROS 链接库。无需为该诊断重编 OpenVINS，也不更改相机固件。
 
 SDK 使用 RSUSB 后端，不执行内核补丁脚本。上游将其定位为适用于原型验证的用户态路径，生产环境推荐原生后端；不能据此假定飞行实时性、IMU 时间戳和断流表现已合格。
 
@@ -281,6 +283,72 @@ sed -n '1,220p' ~/d455_unmerged_imu_test.log
 
 该诊断工具在编写端未连接 D455，需以上述 Orin 实测报告判断结果；不能把脚本或源码检查通过当作硬件采流已修复。
 
+### 6.4 独立 SDK 已复现：先验证包含 RSUSB 修复的版本
+
+2026-10-23 的 `all_7w2oLHNJ/report.log` 已确认诊断程序在 Orin 上编译成功，头文件和运行库均为 2.55.1，运行库来自指定 `/opt/grampus` 目录。内核为 5.10.216-tegra / L4T R35.6.5，USB 拓扑中的 D455 为 5000M；当前测试没有退到 USB2。SDK 列出的 gyro 400 / accel 100 档位均受支持。
+
+关键顺序如下，失败发生在 **Motion 已启动后，Stereo 的 open 阶段**，不是 Motion 的 start 卡死，也不是测试超时：
+
+```text
+STAGE open done: Motion Module
+STAGE start done: Motion Module
+STAGE open begin: Stereo Module
+SDK_ERROR rs2_open_multiple(...): get_xu(ctrl=1) failed!
+RESULT FAILED
+PROBE_EXIT_CODE=1
+```
+
+由于异常发生在计数循环之前，这份报告没有证明 IMU 收到帧，也不能据此声称独立 IMU 帧数为零。编译时的 SDK 头文件 warnings 不是本次失败原因。`IMU Calibration is not available` 警告仍未解决，暂不导出默认外参作为工厂标定。
+
+已核对上游源码：v2.55.1 的 RSUSB HID 实现仍使用旧的 32 字节报文和 16 位 xyz，并将 gyro scale 设置实现为空；固件 5.16 改为 38 字节报文、32 位 xyz。上游 [PR #12857](https://github.com/realsenseai/librealsense/pull/12857) 于 2024-04-30 合并，补齐 RSUSB 的报文解析和 gyro sensitivity 支持。因此此前仅依据 SDK 发布说明推荐 2.55.1 不足以覆盖这个后端，应纠正。这个明确的兼容缺口尚不能证明它是全部 get_xu 错误的唯一原因。
+
+下一步使用包含该修复的 **v2.56.3** 做独立对照。选择依据是[该版本发布说明](https://github.com/realsenseai/librealsense/releases/tag/v2.56.3)列出 D400 固件 5.16.0.1 或更新版本，并且[该标签的 RSUSB 源码](https://github.com/realsenseai/librealsense/blob/v2.56.3/src/hid/hid-device.cpp)包含上述处理。**它是 Beta 版本，这里仅用于地面诊断，不宣称已通过本机或飞行验证。** 暂不切换 ROS 驱动、修改固件或内核。
+
+先停止相机 launch / Viewer，并保持整机服务停止。使用正常终端；本步骤不是 catkin 构建，无需更改 `.bashrc`。下面在子 shell 中遇错即停，源码目录必须尚未存在，不自动覆盖已有内容：
+
+```bash
+(
+  set -e
+  mkdir -p ~/grampus_vio_deps
+  cd ~/grampus_vio_deps
+  git clone --depth 1 --branch v2.56.3 \
+    https://github.com/realsenseai/librealsense.git librealsense-2.56.3
+  cd librealsense-2.56.3
+  test "$(git rev-parse HEAD)" = 05d6eb7ec8efeed4d69b4025d9ff149e7132acd5
+  cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/opt/grampus/librealsense-2.56.3 \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_INSTALL_RPATH=/opt/grampus/librealsense-2.56.3/lib \
+    -DFORCE_RSUSB_BACKEND=ON \
+    -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=ON \
+    -DBUILD_GRAPHICAL_EXAMPLES=OFF -DBUILD_GLSL_EXTENSIONS=OFF \
+    -DBUILD_WITH_CUDA=OFF -DBUILD_WITH_DDS=OFF \
+    -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_UNIT_TESTS=OFF \
+    -DIMPORT_DEPTH_CAM_FW=OFF -DCHECK_FOR_UPDATES=OFF
+  cmake --build build --parallel 2
+  sudo cmake --install build
+)
+```
+
+安装仅使用新的 SDK 前缀；该版本安装过程会运行 ldconfig 更新缓存，不添加新的 ld.so.conf 配置，不替换旧 SDK 或设置全局 LD_LIBRARY_PATH。任一步失败先保留错误，不继续运行测试。
+
+成功后更新工程，将相机完全断开约 10 秒再接回同一 USB3 线和接口；确认没有其他相机进程。运行：
+
+```bash
+cd ~/GrampusDrone &&
+git pull --ff-only origin master &&
+GRAMPUS_RS_SDK_PREFIX=/opt/grampus/librealsense-2.56.3 \
+  bash src/realflight_modules/openvins_bridge/diagnostics/run_d455_sdk_probe.sh all 341522300469
+```
+
+环境变量只对这条命令生效，未指定时仍测试此前的 2.55.1。报告必须显示 `SDK header=2.56.3 runtime=25603`，ldd 的 librealsense 来自 2.56.3 目录。提供完整 report.log：
+
+- 四路有帧且退出码 0：再处理 IMU 标定警告、频率/时间戳检查，以及 ROS1 驱动与新 SDK 的源码兼容和重编；旧 ROS 节点不会因安装了新目录而自动换版本。
+- 仍在 Stereo open 失败：不能宣称上述修复已解决本机；保留同接口对照结果，继续隔离独立 IMU 和设备/USB 后端，必要时跨主机比较，不重复改 OpenVINS 参数。
+
+该版本选择已核对固定标签源码与发布说明；编写端没有执行这套 SDK 的 Jetson 构建或硬件采流测试。
+
 ## 依据与验证边界
 
 - [SDK 2.55.1 官方发布说明](https://github.com/realsenseai/librealsense/wiki/Release-Notes#release-2551)：固件 5.16.0.1 的 IMU 数据格式变更及旧 SDK 不兼容。
@@ -288,4 +356,5 @@ sed -n '1,220p' ~/d455_unmerged_imu_test.log
 - [SDK v2.55.1 Jetson 指南](https://github.com/realsenseai/librealsense/blob/v2.55.1/doc/installation_jetson.md)：RSUSB 与原生后端的差异。
 - [SDK 构建选项](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/lrs_options.cmake) 与 [安装路径](https://github.com/realsenseai/librealsense/blob/v2.55.1/CMake/install_config.cmake)。
 - [ROS 驱动动态选项注册](https://github.com/realsenseai/realsense-ros/blob/2.3.2/realsense2_camera/src/base_realsense_node.cpp) 与 [SDK USB 错误日志实现](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/libusb/messenger-libusb.cpp)。
+- [RSUSB IMU 修复 PR #12857](https://github.com/realsenseai/librealsense/pull/12857)、[2.55.1 的旧报文定义](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/hid/hid-types.h)及 [2.56.3 对照版本说明](https://github.com/realsenseai/librealsense/releases/tag/v2.56.3)。
 - 本文命令依据固定版本源码核对；编写端是 Windows，未执行 Jetson 编译、USB 连接或硬件测试。
