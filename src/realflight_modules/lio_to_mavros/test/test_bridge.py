@@ -16,7 +16,7 @@ from std_msgs.msg import Bool, String
 
 class BridgeTest(unittest.TestCase):
     def setUp(self):
-        self.messages = {key: [] for key in ("legacy", "preview_pose", "preview", "formal", "armed", "forbidden", "stale_state")}
+        self.messages = {key: [] for key in ("legacy", "preview_pose", "preview", "formal", "armed", "forbidden", "stale_state", "recoverable")}
         self.health = {}
         self.status = {}
         self.subscribers = []
@@ -28,14 +28,15 @@ class BridgeTest(unittest.TestCase):
             ("armed", "/test/armed_output", Odometry),
             ("forbidden", "/test/forbidden_pose", PoseStamped),
             ("stale_state", "/test/stale_output", Odometry),
+            ("recoverable", "/test/recoverable_output", Odometry),
         ):
             self.subscribers.append(rospy.Subscriber(topic, kind, lambda m, k=key: self.messages[k].append(m)))
-        for node in ("legacy", "preview", "formal", "armed", "stale_state"):
+        for node in ("legacy", "preview", "formal", "armed", "stale_state", "recoverable"):
             self.subscribers.append(rospy.Subscriber("/" + node + "/healthy", Bool,
                 lambda m, k=node: self.health.update({k: m.data})))
         self.subscribers.append(rospy.Subscriber("/preview/preview/healthy", Bool,
             lambda m: self.health.update({"preview_full": m.data})))
-        for node in ("formal", "stale_state"):
+        for node in ("formal", "stale_state", "recoverable"):
             self.subscribers.append(rospy.Subscriber("/" + node + "/status", String,
                 lambda m, k=node: self.status.update({k: m.data})))
         self.old = rospy.Publisher("/test/legacy_input", Odometry, queue_size=10)
@@ -44,10 +45,12 @@ class BridgeTest(unittest.TestCase):
         self.state = rospy.Publisher("/test/formal_state", State, queue_size=10)
         self.armed_state = rospy.Publisher("/test/armed_state", State, queue_size=10)
         self.stale_state = rospy.Publisher("/test/stale_state", State, queue_size=10)
+        self.recovery_state = rospy.Publisher("/test/recovery_state", State, queue_size=10)
         self.next_state_at = 0.0
         self.stamps = set()
-        expected_connections = ((self.old, 2), (self.preview, 1), (self.formal, 3),
-                                (self.state, 1), (self.armed_state, 1), (self.stale_state, 1))
+        expected_connections = ((self.old, 2), (self.preview, 1), (self.formal, 4),
+                                (self.state, 1), (self.armed_state, 1), (self.stale_state, 1),
+                                (self.recovery_state, 1))
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and any(
                 pub.get_num_connections() < count for pub, count in expected_connections):
@@ -72,7 +75,7 @@ class BridgeTest(unittest.TestCase):
         return m
 
     def pump(self, duration, preview_mode="good", formal_mode="good", connected=True,
-             send_stale_state=True):
+             send_stale_state=True, recovery_armed=False):
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             # Heartbeat-like state cadence, intentionally just slower than 1 Hz.
@@ -81,6 +84,7 @@ class BridgeTest(unittest.TestCase):
                 self.state.publish(State(connected=connected, armed=False))
                 if send_stale_state:
                     self.stale_state.publish(State(connected=True, armed=False))
+                self.recovery_state.publish(State(connected=True, armed=recovery_armed))
                 self.next_state_at = time.monotonic() + 1.1
             # An explicit disconnect must not wait for the heartbeat timeout.
             if not connected:
@@ -110,6 +114,7 @@ class BridgeTest(unittest.TestCase):
         self.assertFalse(self.health.get("armed", True))
         self.assertTrue(self.health["formal"])
         self.assertTrue(self.health["stale_state"])
+        self.assertTrue(self.health["recoverable"])
         pose = self.messages["legacy"][-1]
         self.assertAlmostEqual(pose.pose.position.x, 0)
         self.assertAlmostEqual(pose.pose.position.y, 0)
@@ -155,6 +160,23 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(len(self.messages["formal"]), count)
         self.assertFalse(self.health["formal"])
         self.assertFalse(self.messages["armed"])
+
+        # Temporary odometry loss stops output, then recovers only after a
+        # stationary window without changing the original reference.
+        count = len(self.messages["recoverable"])
+        previous_position = self.messages["recoverable"][-1].pose.pose.position
+        self.pump(.8, formal_mode="none", recovery_armed=True)
+        self.assertFalse(self.health["recoverable"])
+        self.assertIn("RECOVERING", self.status["recoverable"])
+        self.assertEqual(len(self.messages["recoverable"]), count)
+        self.pump(1.0, recovery_armed=True)
+        self.assertTrue(self.health["recoverable"])
+        self.assertGreater(len(self.messages["recoverable"]), count)
+        self.assertIn("READY", self.status["recoverable"])
+        resumed_position = self.messages["recoverable"][-1].pose.pose.position
+        self.assertAlmostEqual(resumed_position.x, previous_position.x, places=6)
+        self.assertAlmostEqual(resumed_position.y, previous_position.y, places=6)
+        self.assertAlmostEqual(resumed_position.z, previous_position.z, places=6)
         # Existing pose outputs stop after input timeout.
         time.sleep(.7)
         before = len(self.messages["legacy"])

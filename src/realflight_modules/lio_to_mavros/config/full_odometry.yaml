@@ -15,6 +15,7 @@ full:
   zero_yaw: false
   reference_yaw: 0.0  # radians, fixed yaw rotation W -> output
   stable_seconds: 5.0
+  # Recovery requires this stationary window plus pose continuity to the last output.
   timeout: 0.5
   # Formal mode only: allow jitter in the roughly 1 Hz MAVROS state heartbeat.
   # Explicit connected=false still latches a fault immediately after READY.

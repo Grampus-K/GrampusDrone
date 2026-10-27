@@ -26,15 +26,31 @@ inline double rotationDistance(const Rotation &a, const Rotation &b) {
 }
 
 // Times passed here are seconds: ROS time for age, steady_clock for arrival.
-// Faults latch until process restart; no automatic reference reset.
+// Recoverable data loss requires a stationary, continuous recovery window.
+// Fatal faults latch until process restart; the reference is never reset.
 class OdometryGuard {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   explicit OdometryGuard(GuardOptions options) : options_(options) { options_.validate(); }
-  bool ready() const { return ready_ && reason_.empty(); }
+  bool ready() const { return ready_ && reason_.empty() && !recovering_; }
   bool failed() const { return !reason_.empty(); }
+  bool recovering() const { return recovering_; }
   const std::string &reason() const { return reason_; }
+  const std::string &recoveryReason() const { return recovery_reason_; }
   void fault(const std::string &reason) { if (!failed()) reason_ = reason; ready_ = false; }
+  void degrade(const std::string &reason) {
+    if (!failed()) {
+      if (ready_) {
+        ready_ = false;
+        recovering_ = true;
+        recovery_reason_ = reason;
+        recovery_anchor_seen_ = false;
+        recovery_checked_ = false;
+      } else {
+        anchor_seen_ = false;
+      }
+    }
+  }
   void tick(double now, double steady) {
     if (!std::isfinite(now) || !std::isfinite(steady)) { fault("invalid clock"); return; }
     if (clock_seen_ && (steady < clock_steady_ ||
@@ -42,10 +58,10 @@ class OdometryGuard {
       fault("system clock jumped");
     clock_seen_ = true; clock_ros_ = now; clock_steady_ = steady;
     if (seen_ && steady-arrival_ > options_.timeout) {
-      if (ready_) fault("odometry timed out; restart on ground");
-      else anchor_seen_ = false;
+      if (ready_) degrade("odometry timed out");
+      else if (!recovering_) anchor_seen_ = false;
     }
-    if (ready_ && now - stamp_*1e-9 > options_.max_age) fault("latest measurement expired");
+    if (ready_ && now - stamp_*1e-9 > options_.max_age) degrade("latest measurement expired");
   }
   bool accept(const Sample &input, std::uint64_t stamp, std::uint32_t sequence,
               double now, double steady, const Transform &i_b, Sample &output) {
@@ -53,9 +69,12 @@ class OdometryGuard {
     if (failed()) return false;
     try {
       Sample base = transformSample(input, i_b, Transform());
-      if (stamp == 0 || now - stamp*1e-9 > options_.max_age ||
-          stamp*1e-9 - now > options_.future_tolerance)
-        throw std::invalid_argument("measurement timestamp is zero, stale or future");
+      if (stamp == 0 || stamp*1e-9 - now > options_.future_tolerance)
+        throw std::invalid_argument("measurement timestamp is zero or future");
+      if (now - stamp*1e-9 > options_.max_age) {
+        degrade("latest measurement expired");
+        return false;
+      }
       if (base.pose.translation.norm() > options_.max_position ||
           base.linear.norm() > options_.max_speed || base.angular.norm() > options_.max_angular)
         throw std::invalid_argument("position, linear or angular speed outside limits");
@@ -74,11 +93,33 @@ class OdometryGuard {
         if (sequence < sequence_ && !(sequence_ > 0xfffffff0u && sequence < 16u))
           throw std::invalid_argument("publisher sequence restarted");
         const double dt = (stamp-stamp_)*1e-9;
+        if (recovering_ && !recovery_checked_) {
+          if ((base.pose.translation-previous_.pose.translation).norm() > options_.stationary_drift ||
+              rotationDistance(base.pose.rotation,previous_.pose.rotation) > options_.stationary_angle)
+            throw std::invalid_argument("odometry discontinuity after measurement loss");
+          recovery_checked_ = true;
+        }
         if ((base.pose.translation-previous_.pose.translation).norm() > options_.max_step+options_.max_speed*dt ||
             rotationDistance(base.pose.rotation,previous_.pose.rotation) > options_.max_angle_step+options_.max_angular*dt)
           throw std::invalid_argument("odometry pose jumped");
       }
       previous_ = base; stamp_ = stamp; sequence_ = sequence; arrival_ = steady; seen_ = true;
+      if (recovering_) {
+        if (!recovery_anchor_seen_ || base.linear.norm() > options_.stationary_speed ||
+            base.angular.norm() > options_.stationary_angular ||
+            (base.pose.translation-recovery_anchor_.translation).norm() > options_.stationary_drift ||
+            rotationDistance(base.pose.rotation,recovery_anchor_.rotation) > options_.stationary_angle) {
+          recovery_anchor_ = base.pose;
+          recovery_anchor_seen_ = true;
+          recovery_since_ = steady;
+          return false;
+        }
+        if (steady-recovery_since_ < options_.stable_seconds) return false;
+        recovering_ = false;
+        recovery_checked_ = false;
+        ready_ = true;
+        recovery_reason_.clear();
+      }
       if (!ready_) {
         if (!anchor_seen_ || base.linear.norm() > options_.stationary_speed ||
             base.angular.norm() > options_.stationary_angular ||
@@ -99,11 +140,14 @@ class OdometryGuard {
  private:
   GuardOptions options_;
   bool ready_{false}, seen_{false}, anchor_seen_{false}, clock_seen_{false};
+  bool recovering_{false}, recovery_checked_{false}, recovery_anchor_seen_{false};
   std::string reason_;
+  std::string recovery_reason_;
   Transform anchor_, reference_;
+  Transform recovery_anchor_;
   Sample previous_;
   std::uint64_t stamp_{0};
   std::uint32_t sequence_{0};
-  double arrival_{0}, stable_since_{0}, clock_ros_{0}, clock_steady_{0};
+  double arrival_{0}, stable_since_{0}, recovery_since_{0}, clock_ros_{0}, clock_steady_{0};
 };
 }  // namespace lio_to_mavros

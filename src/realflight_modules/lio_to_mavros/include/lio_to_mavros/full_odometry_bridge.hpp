@@ -132,12 +132,14 @@ class FullOdometryBridge {
     const double steady=steadySeconds();
     guard_.tick(ros::Time::now().toSec(),steady);
     if (steady-last_config_check_>=1.0) { checkExtrinsics(); last_config_check_=steady; }
-    if (!preview_ && guard_.ready() && !connected(steady)) {
+    if (!preview_ && (guard_.ready() || guard_.recovering()) && !connected(steady)) {
       if (!state_seen_ || !state_.connected) guard_.fault("MAVROS disconnected");
       else guard_.fault("MAVROS state expired (age="+std::to_string(steady-state_at_)+
                         " s, limit="+std::to_string(state_timeout_)+" s)");
     }
     if (guard_.failed()) report("FAULT: "+guard_.reason());
+    else if (guard_.recovering()) report("RECOVERING: "+guard_.recoveryReason()+
+                                         "; waiting for continuous stationary measurements");
   }
 
  private:
@@ -153,8 +155,10 @@ class FullOdometryBridge {
   }
   void onState(const mavros_msgs::State::ConstPtr &m) {
     state_=*m; state_at_=steadySeconds(); state_seen_=true;
-    if (!preview_ && !guard_.ready() && state_.armed) guard_.fault("cannot initialize reference while armed");
-    if (!preview_ && guard_.ready() && !state_.connected) guard_.fault("MAVROS disconnected");
+    if (!preview_ && !guard_.ready() && !guard_.recovering() && state_.armed)
+      guard_.fault("cannot initialize reference while armed");
+    if (!preview_ && (guard_.ready() || guard_.recovering()) && !state_.connected)
+      guard_.fault("MAVROS disconnected");
   }
   void checkExtrinsics() {
     if (guard_.failed()) return;
@@ -216,7 +220,9 @@ class FullOdometryBridge {
                         ros::Time::now().toSec(),steady,i_b_,result)) {
         output_.publish(toMessage(result,m->header,parent_,child_));
         report("READY: forwarding new scan measurements");
-      } else if (!guard_.failed() && !guard_.ready()) report("WAITING: stationary full odometry");
+      } else if (!guard_.failed() && guard_.recovering())
+        report("RECOVERING: "+guard_.recoveryReason()+"; waiting for continuous stationary measurements");
+      else if (!guard_.failed() && !guard_.ready()) report("WAITING: stationary full odometry");
     } catch(const std::invalid_argument &e) { guard_.fault(e.what()); }
     if (guard_.failed()) report("FAULT: "+guard_.reason());
   }
