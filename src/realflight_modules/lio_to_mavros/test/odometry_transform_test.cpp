@@ -133,12 +133,15 @@ struct GuardFixture : testing::Test {
   }
 };
 }
-TEST_F(GuardFixture, NewFramesOnlyAndNoRecovery) {
+TEST_F(GuardFixture, NewFramesOnlyAndTimeoutRecovery) {
   OdometryGuard g(options); open(g);
   EXPECT_FALSE(g.accept(input,100300000000ULL,3,100.4,.4,i_b,output));
   EXPECT_TRUE(g.ready());
-  g.tick(100.81,.81); EXPECT_TRUE(g.failed());
+  g.tick(100.81,.81); EXPECT_FALSE(g.failed()); EXPECT_TRUE(g.recovering());
   EXPECT_FALSE(g.accept(input,100900000000ULL,4,100.9,.9,i_b,output));
+  EXPECT_TRUE(g.recovering());
+  EXPECT_TRUE(g.accept(input,101100000000ULL,5,101.1,1.1,i_b,output));
+  EXPECT_TRUE(g.ready()); EXPECT_FALSE(g.recovering());
 }
 TEST_F(GuardFixture, ChangedDuplicateAndBackwardsTime) {
   OdometryGuard g(options); open(g); input.angular.x()=.01;
@@ -154,7 +157,7 @@ TEST_F(GuardFixture, SequenceRestartAndPoseReset) {
 }
 TEST_F(GuardFixture, ClockJumpAndAgeLimits) {
   OdometryGuard g(options); open(g); g.tick(102,.4); EXPECT_TRUE(g.failed());
-  OdometryGuard old(options); EXPECT_FALSE(old.accept(input,99000000000ULL,1,100,0,i_b,output)); EXPECT_TRUE(old.failed());
+  OdometryGuard old(options); EXPECT_FALSE(old.accept(input,99000000000ULL,1,100,0,i_b,output)); EXPECT_FALSE(old.failed());
   OdometryGuard future(options); EXPECT_FALSE(future.accept(input,100100000000ULL,1,100,0,i_b,output)); EXPECT_TRUE(future.failed());
 }
 TEST_F(GuardFixture, StartupGapDoesNotCountAsStability) {

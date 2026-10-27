@@ -209,7 +209,9 @@ class FullOdometryBridge {
     const double steady=steadySeconds();
     if (!preview_) {
       if (!connected(steady)) { report("WAITING: fresh connected MAVROS state"); return; }
-      if (!guard_.ready() && state_.armed) { guard_.fault("cannot initialize while armed"); tick(); return; }
+      if (!guard_.ready() && !guard_.recovering() && state_.armed) {
+        guard_.fault("cannot initialize while armed"); tick(); return;
+      }
       if (!checkMavrosTF()) { tick(); return; }
     }
     try {
